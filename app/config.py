@@ -32,6 +32,15 @@ class Settings(BaseSettings):
         min_length=32,
         description="Cryptographic secret key; must be at least 32 characters long",
     )
+    DATABASE_URL: str = Field(
+        ...,
+        min_length=1,
+        description="PostgreSQL database connection URL",
+    )
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
+        default=1440,
+        description="Token expiration duration in minutes",
+    )
     LOG_LEVEL: str = Field(
         default="INFO",
         description="Application logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL",

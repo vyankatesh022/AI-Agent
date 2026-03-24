@@ -9,7 +9,10 @@ from fastapi import Depends, FastAPI
 from pydantic import BaseModel, Field
 
 from app.config import Settings, get_settings
+from app.database import init_db
 from app.logging_config import setup_logging
+from app.routers.auth import router as auth_router
+from app.routers.conversations import router as conversations_router
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings.APP_VERSION,
         settings.ENVIRONMENT,
     )
+    # Ensure database schema is initialized
+    init_db()
+    logger.info("Database initialization completed")
     yield
     logger.info("Application shutdown completed: %s", settings.APP_NAME)
 
@@ -48,6 +54,10 @@ def create_app() -> FastAPI:
         description="Production-ready AI Agent Backend foundation.",
         lifespan=lifespan,
     )
+
+    # Register routers
+    application.include_router(auth_router)
+    application.include_router(conversations_router)
 
     @application.get(
         "/health",

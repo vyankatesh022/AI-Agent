@@ -1,30 +1,10 @@
 """Automated tests for FastAPI endpoints and core configuration."""
 
-import os
-from collections.abc import Generator
-
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-# Ensure required environment variables exist before importing application settings
-os.environ.setdefault("APP_NAME", "AI Agent API")
-os.environ.setdefault("APP_VERSION", "0.1.0")
-os.environ.setdefault("ENVIRONMENT", "testing")
-os.environ.setdefault(
-    "SECRET_KEY", "test-secret-key-at-least-32-characters-long-123456"
-)
-os.environ.setdefault("LOG_LEVEL", "DEBUG")
-
-from app.config import Settings, get_settings  # noqa: E402
-from app.main import app  # noqa: E402
-
-
-@pytest.fixture
-def client() -> Generator[TestClient, None, None]:
-    """Fixture providing a FastAPI TestClient instance."""
-    with TestClient(app) as test_client:
-        yield test_client
+from app.config import Settings, get_settings
 
 
 def test_health_endpoint_success(client: TestClient) -> None:
@@ -49,7 +29,19 @@ def test_settings_caching() -> None:
 def test_secret_key_minimum_length_enforcement() -> None:
     """Verify that a SECRET_KEY shorter than 32 characters raises a validation error."""
     with pytest.raises(ValidationError):
-        Settings(SECRET_KEY="short-secret")
+        Settings(
+            SECRET_KEY="short-secret",
+            DATABASE_URL="postgresql+psycopg://test:test@localhost:5432/test",
+        )
+
+
+def test_database_url_required() -> None:
+    """Verify that DATABASE_URL is required and raises validation error when missing."""
+    with pytest.raises(ValidationError):
+        Settings(
+            SECRET_KEY="a" * 32,
+            DATABASE_URL="",  # or missing
+        )
 
 
 def test_settings_loaded_from_env() -> None:
@@ -58,3 +50,4 @@ def test_settings_loaded_from_env() -> None:
     assert settings.APP_NAME == "AI Agent API"
     assert settings.APP_VERSION == "0.1.0"
     assert len(settings.SECRET_KEY) >= 32
+    assert "postgresql" in settings.DATABASE_URL
