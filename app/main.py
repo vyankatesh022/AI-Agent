@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from app.config import Settings, get_settings
 from app.database import init_db
 from app.logging_config import setup_logging
+from app.routers.agent import router as agent_router
 from app.routers.auth import router as auth_router
 from app.routers.conversations import router as conversations_router
 
@@ -58,6 +59,7 @@ def create_app() -> FastAPI:
     # Register routers
     application.include_router(auth_router)
     application.include_router(conversations_router)
+    application.include_router(agent_router)
 
     @application.get(
         "/health",

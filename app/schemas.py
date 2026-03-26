@@ -71,3 +71,34 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: datetime
+
+
+class AgentChatRequest(BaseModel):
+    """Request payload for invoking the LangGraph agent."""
+
+    conversation_id: UUID = Field(
+        description="Target conversation UUID belonging to the authenticated user",
+    )
+    message: str = Field(
+        min_length=1,
+        description="User text prompt or query",
+    )
+    provider: str | None = Field(
+        default=None,
+        description="Optional provider override ('gemini' or 'openai')",
+    )
+    model: str | None = Field(
+        default=None,
+        description="Optional model override from the approved model allowlist",
+    )
+
+
+class AgentChatResponse(BaseModel):
+    """Response payload returned by the LangGraph agent."""
+
+    conversation_id: UUID
+    message: str
+    role: str = "assistant"
+    intent: str
+    provider: str
+    model: str

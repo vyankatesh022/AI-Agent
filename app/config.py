@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         description="Name of the service",
     )
     APP_VERSION: str = Field(
-        default="0.1.0",
+        default="0.2.0",
         description="Semantic version of the application",
     )
     ENVIRONMENT: str = Field(
@@ -45,6 +45,52 @@ class Settings(BaseSettings):
         default="INFO",
         description="Application logging level: DEBUG, INFO, WARNING, ERROR, CRITICAL",
     )
+
+    # LLM Multi-Model Provider Settings
+    LLM_PROVIDER: str = Field(
+        default="gemini",
+        description="Default LLM provider: 'gemini' or 'openai'",
+    )
+    OPENAI_API_KEY: str | None = Field(
+        default=None,
+        description="OpenAI API secret key",
+    )
+    OPENAI_MODEL: str = Field(
+        default="gpt-4o-mini",
+        description="Configured default OpenAI model",
+    )
+    GOOGLE_API_KEY: str | None = Field(
+        default=None,
+        description="Google Gemini API secret key",
+    )
+    GEMINI_MODEL: str = Field(
+        default="gemini-2.0-flash",
+        description="Configured default Gemini model",
+    )
+    LLM_TIMEOUT_SECONDS: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+        description="Timeout in seconds for external LLM API calls",
+    )
+    LLM_MAX_RETRIES: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        description="Maximum retry attempts for transient LLM errors",
+    )
+
+    @field_validator("LLM_PROVIDER")
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
+        valid_providers = {"openai", "gemini"}
+        normalized = v.strip().lower()
+        if normalized not in valid_providers:
+            raise ValueError(
+                f"Unsupported LLM_PROVIDER '{v}'. "
+                f"Supported providers: {', '.join(sorted(valid_providers))}"
+            )
+        return normalized
 
 
 @lru_cache
