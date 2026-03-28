@@ -1,6 +1,7 @@
 """Pydantic schemas for request validation and response serialization."""
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -100,5 +101,58 @@ class AgentChatResponse(BaseModel):
     message: str
     role: str = "assistant"
     intent: str
+    provider: str
+    model: str
+    citations: list[dict[str, Any]] | None = None
+
+
+class DocumentResponse(BaseModel):
+    """Document metadata response representation."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    original_filename: str
+    file_size: int
+    content_type: str
+    status: str
+    page_count: int
+    chunk_count: int
+    processing_error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class DocumentListResponse(BaseModel):
+    """List response for documents owned by user."""
+
+    documents: list[DocumentResponse]
+    total: int
+
+
+class RAGQueryRequest(BaseModel):
+    """Direct RAG query payload."""
+
+    query: str = Field(
+        min_length=1,
+        max_length=2000,
+        description="Question to answer using indexed documents",
+    )
+    top_k: int | None = Field(
+        default=None, ge=1, le=20, description="Optional chunk retrieval count"
+    )
+    provider: str | None = Field(
+        default=None, description="Optional LLM provider override"
+    )
+    model: str | None = Field(default=None, description="Optional LLM model override")
+
+
+class RAGQueryResponse(BaseModel):
+    """Grounded RAG query response with citations."""
+
+    query: str
+    response: str
+    citations: list[dict[str, Any]]
+    retrieved_count: int
     provider: str
     model: str

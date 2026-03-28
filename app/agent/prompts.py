@@ -13,7 +13,9 @@ Classify the user's latest query into EXACTLY one category:
 
 - "general_chat": For chit-chat, greetings, questions, or general assistance.
 - "database_query": For requests asking about the user's account, profile,
-  list of conversations, message history, or stored data.
+  list of conversations, message history, or stored account data.
+- "document_search": For questions asking about documents, files, PDFs, policies,
+  uploaded reports, or information contained in uploaded documents.
 - "unknown": If the intent cannot be determined.
 
 Respond with ONLY the exact label name in lowercase, with no extra punctuation.

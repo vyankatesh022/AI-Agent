@@ -11,11 +11,13 @@ from app.agent.nodes import (
     execute_tool_node,
     load_context_node,
     normal_llm_node,
+    rag_node,
     synthesize_tool_response_node,
 )
 from app.agent.router import route_intent
 from app.agent.state import AgentState
 from app.llm.base import BaseLLMProvider
+from app.rag.retriever import DocumentRetriever
 from app.tools.base import ToolRegistry
 
 
@@ -24,6 +26,7 @@ def build_agent_graph(
     tool_registry: ToolRegistry,
     db: Session,
     max_retries: int = 2,
+    retriever: DocumentRetriever | None = None,
 ) -> CompiledStateGraph:
     """Build and compile the multi-step LangGraph agent workflow.
 
@@ -35,6 +38,7 @@ def build_agent_graph(
     classify_intent
       ↓ (conditional)
       ├── database_query -> execute_tool -> synthesize_tool_response -> END
+      ├── document_search -> rag_node ---------------------------------> END
       └── general_chat   -> normal_llm   ----------------------------> END
     """
     workflow = StateGraph(AgentState)
@@ -61,6 +65,10 @@ def build_agent_graph(
         "synthesize_tool_response",
         partial(synthesize_tool_response_node, llm_provider=llm_provider),
     )
+    workflow.add_node(
+        "rag_node",
+        partial(rag_node, llm_provider=llm_provider, retriever=retriever),
+    )
 
     # Construct directed edges
     workflow.add_edge(START, "load_context")
@@ -71,10 +79,12 @@ def build_agent_graph(
         {
             "execute_tool": "execute_tool",
             "normal_llm": "normal_llm",
+            "rag_node": "rag_node",
         },
     )
     workflow.add_edge("execute_tool", "synthesize_tool_response")
     workflow.add_edge("synthesize_tool_response", END)
     workflow.add_edge("normal_llm", END)
+    workflow.add_edge("rag_node", END)
 
     return workflow.compile()

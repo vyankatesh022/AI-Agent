@@ -71,9 +71,7 @@ def get_conversation(
 ) -> Conversation:
     """Retrieve a conversation by ID, enforcing strict user ownership."""
     conversation = (
-        db.query(Conversation)
-        .filter(Conversation.id == conversation_id)
-        .first()
+        db.query(Conversation).filter(Conversation.id == conversation_id).first()
     )
 
     # Enforce isolation: return 404 if not found or not owned by the current user
@@ -98,9 +96,7 @@ def list_conversation_messages(
 ) -> list[Message]:
     """Retrieve messages for an owned conversation."""
     conversation = (
-        db.query(Conversation)
-        .filter(Conversation.id == conversation_id)
-        .first()
+        db.query(Conversation).filter(Conversation.id == conversation_id).first()
     )
 
     if not conversation or conversation.user_id != current_user.id:

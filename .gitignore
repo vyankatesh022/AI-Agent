@@ -44,5 +44,10 @@ dist/
 *.sqlite3
 
 # Future session storage (RAG, uploads, vector stores)
-uploads/
-vector_store/
+/uploads/
+/vector_store/
+/data/
+/documents/
+*.pdf
+*.faiss
+

@@ -86,8 +86,6 @@ class ToolRegistry:
                 tool_name,
                 user_id,
             )
-            raise PermissionError(
-                f"Tool '{tool_name}' is not an approved tool."
-            )
+            raise PermissionError(f"Tool '{tool_name}' is not an approved tool.")
 
         return await tool.execute(user_id=user_id, **kwargs)

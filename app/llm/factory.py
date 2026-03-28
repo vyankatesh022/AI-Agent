@@ -50,9 +50,7 @@ class LLMFactory:
             ValueError: If the provider is unsupported or credentials are missing.
         """
         app_settings = settings or get_settings()
-        selected_provider = (
-            provider_name or app_settings.LLM_PROVIDER
-        ).strip().lower()
+        selected_provider = (provider_name or app_settings.LLM_PROVIDER).strip().lower()
 
         # Check if a custom mock provider was registered for tests
         if selected_provider in cls._custom_providers:

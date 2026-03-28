@@ -10,4 +10,7 @@ def route_intent(state: AgentState) -> str:
     if intent == "database_query":
         return "execute_tool"
 
+    if intent == "document_search":
+        return "rag_node"
+
     return "normal_llm"

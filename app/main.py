@@ -14,6 +14,7 @@ from app.logging_config import setup_logging
 from app.routers.agent import router as agent_router
 from app.routers.auth import router as auth_router
 from app.routers.conversations import router as conversations_router
+from app.routers.documents import router as documents_router
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     application.include_router(auth_router)
     application.include_router(conversations_router)
     application.include_router(agent_router)
+    application.include_router(documents_router)
 
     @application.get(
         "/health",

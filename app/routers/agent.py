@@ -116,6 +116,7 @@ async def chat(
         "error": None,
         "retry_count": 0,
         "final_response": None,
+        "citations": None,
     }
 
     try:
@@ -158,4 +159,5 @@ async def chat(
         intent=result.get("intent", "general_chat"),
         provider=llm_provider.provider_name,
         model=llm_provider.model_name,
+        citations=result.get("citations"),
     )

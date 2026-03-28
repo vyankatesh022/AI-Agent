@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         description="Name of the service",
     )
     APP_VERSION: str = Field(
-        default="0.2.0",
+        default="0.4.0",
         description="Semantic version of the application",
     )
     ENVIRONMENT: str = Field(
@@ -78,6 +78,48 @@ class Settings(BaseSettings):
         ge=0,
         le=5,
         description="Maximum retry attempts for transient LLM errors",
+    )
+
+    # Document & RAG Settings
+    DOCUMENT_STORAGE_PATH: str = Field(
+        default="data/documents",
+        description="Filesystem directory for uploaded document storage",
+    )
+    FAISS_INDEX_PATH: str = Field(
+        default="data/indexes",
+        description="Filesystem directory for user-isolated FAISS indexes",
+    )
+    MAX_DOCUMENT_SIZE_MB: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum allowed uploaded PDF size in megabytes",
+    )
+    RAG_CHUNK_SIZE: int = Field(
+        default=500,
+        ge=50,
+        le=4000,
+        description="Chunk size for document text splitting",
+    )
+    RAG_CHUNK_OVERLAP: int = Field(
+        default=50,
+        ge=0,
+        le=500,
+        description="Chunk overlap for context continuity",
+    )
+    RAG_TOP_K: int = Field(
+        default=4,
+        ge=1,
+        le=20,
+        description="Top-k chunks to retrieve per RAG query",
+    )
+    EMBEDDING_PROVIDER: str = Field(
+        default="gemini",
+        description="Embedding provider: 'gemini' or 'openai'",
+    )
+    EMBEDDING_MODEL: str = Field(
+        default="text-embedding-004",
+        description="Model name for generating vector embeddings",
     )
 
     @field_validator("LLM_PROVIDER")

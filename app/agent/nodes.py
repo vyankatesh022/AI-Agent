@@ -14,6 +14,8 @@ from app.agent.prompts import (
 from app.agent.state import AgentState
 from app.llm.base import BaseLLMProvider
 from app.models import Message
+from app.rag.pipeline import RAGPipeline
+from app.rag.retriever import DocumentRetriever
 from app.tools.base import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -34,9 +36,7 @@ async def load_context_node(state: AgentState, db: Session) -> dict[str, Any]:
                 .limit(10)
                 .all()
             )
-            history = [
-                {"role": m.role, "content": m.content} for m in past_messages
-            ]
+            history = [{"role": m.role, "content": m.content} for m in past_messages]
             if (
                 messages
                 and history
@@ -83,6 +83,23 @@ async def classify_intent_node(
             "tool_operation": tool_op,
         }
 
+    doc_keywords = [
+        "document",
+        "documents",
+        "pdf",
+        "pdfs",
+        "uploaded file",
+        "uploaded files",
+        "policy",
+        "policies",
+        "report",
+        "what does the doc say",
+        "in my document",
+        "in the file",
+    ]
+    if any(k in lower_query for k in doc_keywords):
+        return {"intent": "document_search"}
+
     try:
         classification_prompt = [
             {"role": "system", "content": INTENT_CLASSIFICATION_PROMPT},
@@ -91,9 +108,7 @@ async def classify_intent_node(
         raw_intent = await llm_provider.generate_response(
             messages=classification_prompt,
         )
-        normalized = (
-            raw_intent.strip().lower().replace('"', "").replace("'", "")
-        )
+        normalized = raw_intent.strip().lower().replace('"', "").replace("'", "")
 
         if "database" in normalized:
             tool_op = "get_current_user_profile"
@@ -104,6 +119,8 @@ async def classify_intent_node(
                 "tool_name": "safe_database",
                 "tool_operation": tool_op,
             }
+        if "document" in normalized:
+            return {"intent": "document_search"}
         return {"intent": "general_chat"}
 
     except Exception as exc:
@@ -215,6 +232,47 @@ async def synthesize_tool_response_node(
         logger.warning(
             "Tool synthesis LLM call failed, returning raw formatting: %s", exc
         )
+        return {"final_response": f"Here is the requested information:\n{tool_result}"}
+
+
+async def rag_node(
+    state: AgentState,
+    llm_provider: BaseLLMProvider,
+    retriever: DocumentRetriever | None = None,
+) -> dict[str, Any]:
+    """Execute grounded RAG workflow for document search queries."""
+    user_id_str = state.get("user_id")
+    if not user_id_str:
         return {
-            "final_response": f"Here is the requested information:\n{tool_result}"
+            "final_response": "Missing user identification for document search.",
+            "error": "Unauthenticated user in RAG node",
+        }
+
+    user_query = ""
+    for msg in reversed(state.get("messages", [])):
+        if msg.get("role") == "user":
+            user_query = msg.get("content", "")
+            break
+
+    try:
+        user_uuid = uuid.UUID(user_id_str)
+        pipeline = RAGPipeline(retriever=retriever)
+        rag_result = await pipeline.run(
+            user_id=user_uuid,
+            query=user_query,
+            llm_provider=llm_provider,
+        )
+        return {
+            "final_response": rag_result.response,
+            "citations": [c.to_dict() for c in rag_result.citations],
+            "error": None,
+        }
+    except Exception as exc:
+        logger.error("RAG node execution error: %s", exc)
+        return {
+            "final_response": (
+                "An error occurred while retrieving or searching through "
+                "your documents. Please try again."
+            ),
+            "error": str(exc),
         }
