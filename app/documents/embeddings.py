@@ -1,9 +1,9 @@
 """Embedding provider abstractions and factory supporting OpenAI, Gemini, and Mock models."""
 
-from abc import ABC, abstractmethod
 import hashlib
 import logging
 import math
+from abc import ABC, abstractmethod
 from typing import ClassVar
 
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -74,9 +74,11 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
     ) -> None:
         if not api_key:
             raise ValueError("Google API key must be provided for embeddings.")
-        
+
         # Ensure model is formatted properly for Google GenAI
-        normalized_model = model_name if model_name.startswith("models/") else f"models/{model_name}"
+        normalized_model = (
+            model_name if model_name.startswith("models/") else f"models/{model_name}"
+        )
         self.model_name = normalized_model
         self._client = GoogleGenerativeAIEmbeddings(
             google_api_key=api_key,
@@ -108,7 +110,7 @@ class MockEmbeddingProvider(BaseEmbeddingProvider):
         # Hash text to seed vector values
         vector = []
         for i in range(self._dimension):
-            h = hashlib.sha256(f"{text}_{i}".encode("utf-8")).hexdigest()
+            h = hashlib.sha256(f"{text}_{i}".encode()).hexdigest()
             # Convert first 8 hex characters to float in [-1.0, 1.0]
             val = (int(h[:8], 16) / 0xFFFFFFFF) * 2.0 - 1.0
             vector.append(val)

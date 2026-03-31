@@ -2,9 +2,9 @@
 
 import json
 import logging
+import uuid
 from pathlib import Path
 from typing import Any
-import uuid
 
 import faiss
 import numpy as np
@@ -55,10 +55,14 @@ class UserFAISSIndex:
 
     def load(self) -> None:
         """Load user index and metadata from disk if present, else create empty index."""
-        if self.index_file.exists() and self.meta_file.exists() and self.vectors_file.exists():
+        if (
+            self.index_file.exists()
+            and self.meta_file.exists()
+            and self.vectors_file.exists()
+        ):
             try:
                 self.index = faiss.read_index(str(self.index_file))
-                with open(self.meta_file, "r", encoding="utf-8") as f:
+                with open(self.meta_file, encoding="utf-8") as f:
                     self.chunks_metadata = json.load(f)
                 self._vectors = np.load(str(self.vectors_file))
                 logger.debug(
@@ -181,7 +185,7 @@ class UserFAISSIndex:
         scores, indices = self.index.search(q_arr, k)
 
         results: list[tuple[dict[str, Any], float]] = []
-        for score, idx in zip(scores[0], indices[0]):
+        for score, idx in zip(scores[0], indices[0], strict=False):
             if idx >= 0 and idx < len(self.chunks_metadata):
                 results.append((self.chunks_metadata[idx], float(score)))
 

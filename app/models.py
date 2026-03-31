@@ -3,7 +3,17 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    Uuid,
+)
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -28,6 +38,12 @@ class User(Base):
     )
     documents = relationship(
         "Document", back_populates="owner", cascade="all, delete-orphan"
+    )
+    chunks = relationship(
+        "DocumentChunkModel",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
 
@@ -115,3 +131,50 @@ class Document(Base):
     )
 
     owner = relationship("User", back_populates="documents")
+    chunks = relationship(
+        "DocumentChunkModel",
+        back_populates="document",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class DocumentChunkModel(Base):
+    """Authoritative chunk text and full-text search vector stored in PostgreSQL."""
+
+    __tablename__ = "document_chunks"
+
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(
+        Uuid(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    chunk_index = Column(Integer, nullable=False)
+    page_number = Column(Integer, nullable=False)
+    content = Column(Text, nullable=False)
+    search_vector = Column(TSVECTOR, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    document = relationship("Document", back_populates="chunks")
+    user = relationship("User", back_populates="chunks")
+
+    __table_args__ = (
+        Index(
+            "ix_document_chunks_search_vector",
+            "search_vector",
+            postgresql_using="gin",
+        ),
+        Index("ix_document_chunks_user_doc", "user_id", "document_id"),
+    )

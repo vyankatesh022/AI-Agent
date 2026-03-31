@@ -13,30 +13,30 @@ from app.agent.prompts import (
 )
 from app.agent.state import AgentState
 from app.llm.base import BaseLLMProvider
-from app.models import Message
+from app.memory.service import ConversationMemoryService
 from app.rag.pipeline import RAGPipeline
-from app.rag.retriever import DocumentRetriever
 from app.tools.base import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
 
 async def load_context_node(state: AgentState, db: Session) -> dict[str, Any]:
-    """Load conversation history from PostgreSQL to provide context."""
+    """Load bounded conversation history using ConversationMemoryService."""
     conv_id = state.get("conversation_id")
+    user_id_str = state.get("user_id")
     messages = list(state.get("messages", []))
 
-    if conv_id:
+    if conv_id and user_id_str:
         try:
             conv_uuid = uuid.UUID(conv_id)
-            past_messages = (
-                db.query(Message)
-                .filter(Message.conversation_id == conv_uuid)
-                .order_by(Message.created_at.asc())
-                .limit(10)
-                .all()
+            user_uuid = uuid.UUID(user_id_str)
+            memory_service = ConversationMemoryService()
+            ctx = memory_service.load_context(
+                db=db,
+                user_id=user_uuid,
+                conversation_id=conv_uuid,
             )
-            history = [{"role": m.role, "content": m.content} for m in past_messages]
+            history = ctx.to_message_dicts()
             if (
                 messages
                 and history
@@ -238,7 +238,8 @@ async def synthesize_tool_response_node(
 async def rag_node(
     state: AgentState,
     llm_provider: BaseLLMProvider,
-    retriever: DocumentRetriever | None = None,
+    retriever: Any | None = None,
+    db: Session | None = None,
 ) -> dict[str, Any]:
     """Execute grounded RAG workflow for document search queries."""
     user_id_str = state.get("user_id")
@@ -261,10 +262,15 @@ async def rag_node(
             user_id=user_uuid,
             query=user_query,
             llm_provider=llm_provider,
+            db=db,
         )
+        citations_list = [
+            c.to_dict() if hasattr(c, "to_dict") else c for c in rag_result.citations
+        ]
         return {
             "final_response": rag_result.response,
-            "citations": [c.to_dict() for c in rag_result.citations],
+            "citations": citations_list,
+            "sources": [s.to_dict() for s in rag_result.sources],
             "error": None,
         }
     except Exception as exc:

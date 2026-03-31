@@ -14,7 +14,6 @@ from app.documents.service import DocumentService
 from app.llm.factory import LLMFactory
 from app.models import User
 from app.rag.pipeline import RAGPipeline
-from app.rag.retriever import DocumentRetriever
 from app.schemas import (
     DocumentListResponse,
     DocumentResponse,
@@ -156,6 +155,7 @@ def delete_document(
 async def query_documents(
     payload: RAGQueryRequest,
     current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> RAGQueryResponse:
     """Query user documents with semantic retrieval, LLM synthesis, and citations."""
@@ -191,19 +191,24 @@ async def query_documents(
             detail="Language model provider is not properly configured.",
         ) from exc
 
-    pipeline = RAGPipeline(retriever=DocumentRetriever())
+    pipeline = RAGPipeline()
     result = await pipeline.run(
         user_id=current_user.id,
         query=payload.query,
         llm_provider=llm_provider,
         top_k=payload.top_k,
+        db=db,
     )
 
     return RAGQueryResponse(
         query=payload.query,
         response=result.response,
-        citations=[c.to_dict() for c in result.citations],
+        citations=[
+            c.to_dict() if hasattr(c, "to_dict") else c for c in result.citations
+        ],
+        sources=[s.to_dict() for s in result.sources],
         retrieved_count=result.retrieved_count,
+        retrieval_mode=result.retrieval_mode,
         provider=llm_provider.provider_name,
         model=llm_provider.model_name,
     )

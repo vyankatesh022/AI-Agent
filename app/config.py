@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         description="Name of the service",
     )
     APP_VERSION: str = Field(
-        default="0.4.0",
+        default="0.5.0",
         description="Semantic version of the application",
     )
     ENVIRONMENT: str = Field(
@@ -107,11 +107,50 @@ class Settings(BaseSettings):
         le=500,
         description="Chunk overlap for context continuity",
     )
+    # Hybrid Retrieval & Scoring Settings
+    VECTOR_TOP_K: int = Field(
+        default=4,
+        ge=1,
+        le=50,
+        description="Candidate count for vector retrieval",
+    )
+    KEYWORD_TOP_K: int = Field(
+        default=4,
+        ge=1,
+        le=50,
+        description="Candidate count for PostgreSQL keyword retrieval",
+    )
     RAG_TOP_K: int = Field(
         default=4,
         ge=1,
         le=20,
         description="Top-k chunks to retrieve per RAG query",
+    )
+    VECTOR_RETRIEVAL_WEIGHT: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Weight given to normalized vector similarity score",
+    )
+    KEYWORD_RETRIEVAL_WEIGHT: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description="Weight given to normalized keyword search score",
+    )
+
+    # Conversation Memory Settings
+    MAX_CONVERSATION_MESSAGES: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="Maximum recent conversation messages to include in agent context",
+    )
+    MAX_CONTEXT_TOKENS: int = Field(
+        default=4000,
+        ge=500,
+        le=32000,
+        description="Maximum character/token budget for conversation history",
     )
     EMBEDDING_PROVIDER: str = Field(
         default="gemini",
@@ -133,6 +172,15 @@ class Settings(BaseSettings):
                 f"Supported providers: {', '.join(sorted(valid_providers))}"
             )
         return normalized
+
+    @model_validator(mode="after")
+    def validate_retrieval_weights(self) -> "Settings":
+        total_weight = self.VECTOR_RETRIEVAL_WEIGHT + self.KEYWORD_RETRIEVAL_WEIGHT
+        if total_weight <= 0.0:
+            raise ValueError(
+                "Combined VECTOR_RETRIEVAL_WEIGHT and KEYWORD_RETRIEVAL_WEIGHT must be > 0.0"
+            )
+        return self
 
 
 @lru_cache

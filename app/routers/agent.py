@@ -117,6 +117,7 @@ async def chat(
         "retry_count": 0,
         "final_response": None,
         "citations": None,
+        "sources": None,
     }
 
     try:
@@ -152,6 +153,19 @@ async def chat(
         result.get("retry_count", 0),
     )
 
+    raw_citations = result.get("citations")
+    serialized_citations = (
+        [c.to_dict() if hasattr(c, "to_dict") else c for c in raw_citations]
+        if raw_citations
+        else None
+    )
+    raw_sources = result.get("sources")
+    serialized_sources = (
+        [s.to_dict() if hasattr(s, "to_dict") else s for s in raw_sources]
+        if raw_sources
+        else None
+    )
+
     return AgentChatResponse(
         conversation_id=conversation.id,
         message=final_text,
@@ -159,5 +173,6 @@ async def chat(
         intent=result.get("intent", "general_chat"),
         provider=llm_provider.provider_name,
         model=llm_provider.model_name,
-        citations=result.get("citations"),
+        citations=serialized_citations,
+        sources=serialized_sources,
     )

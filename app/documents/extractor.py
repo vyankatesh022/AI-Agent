@@ -3,6 +3,7 @@
 import io
 import logging
 import re
+
 from pypdf import PdfReader
 
 logger = logging.getLogger(__name__)

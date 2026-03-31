@@ -1,9 +1,9 @@
 """Document text chunker attaching rich metadata for RAG attribution."""
 
-from dataclasses import asdict, dataclass, field
 import logging
-from typing import Any
 import uuid
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 

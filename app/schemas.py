@@ -104,6 +104,7 @@ class AgentChatResponse(BaseModel):
     provider: str
     model: str
     citations: list[dict[str, Any]] | None = None
+    sources: list[dict[str, Any]] | None = None
 
 
 class DocumentResponse(BaseModel):
@@ -153,6 +154,8 @@ class RAGQueryResponse(BaseModel):
     query: str
     response: str
     citations: list[dict[str, Any]]
+    sources: list[dict[str, Any]] | None = None
     retrieved_count: int
+    retrieval_mode: str = "hybrid"
     provider: str
     model: str

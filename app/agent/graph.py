@@ -67,7 +67,12 @@ def build_agent_graph(
     )
     workflow.add_node(
         "rag_node",
-        partial(rag_node, llm_provider=llm_provider, retriever=retriever),
+        partial(
+            rag_node,
+            llm_provider=llm_provider,
+            retriever=retriever,
+            db=db,
+        ),
     )
 
     # Construct directed edges

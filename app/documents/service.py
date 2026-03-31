@@ -1,9 +1,10 @@
 """Document management service orchestrating ingestion, indexing, and lifecycle."""
 
 import logging
-from typing import Sequence
 import uuid
+from collections.abc import Sequence
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -13,7 +14,7 @@ from app.documents.extractor import DocumentExtractor
 from app.documents.index import UserFAISSIndex
 from app.documents.storage import DocumentStorage
 from app.documents.validator import DocumentValidator
-from app.models import Document
+from app.models import Document, DocumentChunkModel
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,29 @@ class DocumentService:
             chunk_texts = [c.text for c in chunks]
             embeddings = embedder.embed_texts(chunk_texts)
 
-            # Step 7: Index chunks into user's isolated FAISS index
+            # Step 7a: Persist chunks into PostgreSQL for authoritative storage and full-text keyword search
+            chunk_models = []
+            for c in chunks:
+                chunk_uuid = (
+                    uuid.UUID(c.chunk_id)
+                    if isinstance(c.chunk_id, str) and len(c.chunk_id) == 36
+                    else uuid.uuid4()
+                )
+                c.chunk_id = str(chunk_uuid)
+                chunk_model = DocumentChunkModel(
+                    id=chunk_uuid,
+                    document_id=doc_id,
+                    user_id=user_id,
+                    chunk_index=c.chunk_index,
+                    page_number=c.page_number,
+                    content=c.text,
+                    search_vector=func.to_tsvector("english", c.text),
+                )
+                chunk_models.append(chunk_model)
+            db.add_all(chunk_models)
+            db.commit()
+
+            # Step 7b: Index chunks into user's isolated FAISS index
             user_index = UserFAISSIndex(
                 user_id=user_id,
                 base_dir=self.settings.FAISS_INDEX_PATH,
@@ -197,7 +220,9 @@ class DocumentService:
             )
             user_index.delete_document(document_id)
         except Exception as exc:
-            logger.warning("Error pruning FAISS index for document %s: %s", document_id, exc)
+            logger.warning(
+                "Error pruning FAISS index for document %s: %s", document_id, exc
+            )
 
         # 2. Delete file from storage
         if doc.storage_path:
@@ -206,5 +231,7 @@ class DocumentService:
         # 3. Delete from DB
         db.delete(doc)
         db.commit()
-        logger.info("Successfully deleted document %s for user %s", document_id, user_id)
+        logger.info(
+            "Successfully deleted document %s for user %s", document_id, user_id
+        )
         return True

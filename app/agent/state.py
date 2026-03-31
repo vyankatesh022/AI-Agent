@@ -24,3 +24,4 @@ class AgentState(TypedDict):
     retry_count: int
     final_response: str | None
     citations: list[dict[str, Any]] | None
+    sources: list[dict[str, Any]] | None

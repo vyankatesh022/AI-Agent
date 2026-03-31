@@ -1,8 +1,8 @@
 """Secure filesystem storage manager for uploaded document files."""
 
 import logging
-from pathlib import Path
 import uuid
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
