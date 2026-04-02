@@ -13,13 +13,48 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.llm.factory import LLMFactory
 from app.models import Conversation, Message, User
-from app.schemas import AgentChatRequest, AgentChatResponse
+from app.schemas import (
+    AgentChatRequest,
+    AgentChatResponse,
+    ModelsResponse,
+    ProviderModels,
+)
 from app.tools.base import ToolRegistry
 from app.tools.safe_database import SafeDatabaseTool
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
+
+
+@router.get(
+    "/models",
+    response_model=ModelsResponse,
+    summary="List available LLM providers and models",
+)
+async def list_models(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> ModelsResponse:
+    """Return backend-approved LLM providers and models."""
+    default_model = (
+        settings.GEMINI_MODEL
+        if settings.LLM_PROVIDER == "gemini"
+        else settings.OPENAI_MODEL
+    )
+    return ModelsResponse(
+        default_provider=settings.LLM_PROVIDER,
+        default_model=default_model,
+        providers={
+            "gemini": ProviderModels(
+                name="Google Gemini",
+                models=sorted(LLMFactory.ALLOWED_MODELS.get("gemini", set())),
+            ),
+            "openai": ProviderModels(
+                name="OpenAI",
+                models=sorted(LLMFactory.ALLOWED_MODELS.get("openai", set())),
+            ),
+        },
+    )
 
 
 @router.post(

@@ -37,13 +37,20 @@ temp/
 build/
 dist/
 *.egg-info/
+node_modules/
+
+# OS and Editor artifacts
+.DS_Store
+.vscode/
+.idea/
+coverage/
 
 # Databases
 *.db
 *.sqlite
 *.sqlite3
 
-# Future session storage (RAG, uploads, vector stores)
+#  storage (RAG, uploads, vector stores)
 /uploads/
 /vector_store/
 /data/

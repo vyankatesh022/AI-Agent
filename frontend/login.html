@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In — AI Agent</title>
+
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body class="auth-page">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div style="display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: var(--radius-lg); background: var(--primary-subtle); color: var(--primary); margin-bottom: var(--space-2);">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <h1>Welcome Back</h1>
+      <p>Sign in to access your conversations and RAG documents</p>
+    </div>
+
+    <!-- Error Banner -->
+    <div id="error-banner" class="toast toast-error" style="display: none; margin-bottom: var(--space-4); width: 100%; animation: none;" role="alert"></div>
+
+    <form id="login-form">
+      <div class="form-group">
+        <label for="email" class="form-label">Email Address</label>
+        <input
+          type="email"
+          id="email"
+          class="form-input"
+          placeholder="name@example.com"
+          required
+          autocomplete="email"
+          autofocus
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="password" class="form-label">Password</label>
+        <input
+          type="password"
+          id="password"
+          class="form-input"
+          placeholder="Enter your password"
+          required
+          autocomplete="current-password"
+        >
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-6); font-size: 0.85rem;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-muted);">
+          <input type="checkbox" id="remember-me" style="accent-color: var(--primary); cursor: pointer;">
+          <span>Remember me</span>
+        </label>
+      </div>
+
+      <button type="submit" id="login-btn" class="btn btn-primary btn-block" style="padding: 10px;">
+        Sign In
+      </button>
+    </form>
+
+    <div class="auth-footer">
+      Don't have an account? <a href="register.html">Create one</a>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script type="module">
+    import { auth } from "./js/auth.js";
+    import { ui } from "./js/ui.js";
+
+    // Redirect to index if already authenticated
+    auth.redirectIfAuthenticated();
+
+    const form = document.getElementById("login-form");
+    const errorBanner = document.getElementById("error-banner");
+    const submitBtn = document.getElementById("login-btn");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorBanner.style.display = "none";
+
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+      const rememberMe = document.getElementById("remember-me").checked;
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span class="spinner" style="width: 16px; height: 16px;"></span> Signing in...`;
+
+      try {
+        await auth.login(email, password, rememberMe);
+        ui.showToast("Signed in successfully!", "success");
+        setTimeout(() => {
+          window.location.href = window.location.pathname.startsWith("/ui/") ? "/ui/index.html" : "index.html";
+        }, 300);
+      } catch (err) {
+        errorBanner.textContent = err.message || "Invalid email or password.";
+        errorBanner.style.display = "flex";
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Sign In";
+      }
+    });
+  </script>
+</body>
+</html>

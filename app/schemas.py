@@ -107,6 +107,21 @@ class AgentChatResponse(BaseModel):
     sources: list[dict[str, Any]] | None = None
 
 
+class ProviderModels(BaseModel):
+    """Model information for a specific provider."""
+
+    name: str
+    models: list[str]
+
+
+class ModelsResponse(BaseModel):
+    """Available LLM providers and models allowlist."""
+
+    default_provider: str
+    default_model: str
+    providers: dict[str, ProviderModels]
+
+
 class DocumentResponse(BaseModel):
     """Document metadata response representation."""
 

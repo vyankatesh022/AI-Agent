@@ -3,9 +3,13 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from app.config import Settings, get_settings
@@ -57,11 +61,33 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Enable CORS for browser GUI client compatibility
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     # Register routers
     application.include_router(auth_router)
     application.include_router(conversations_router)
     application.include_router(agent_router)
     application.include_router(documents_router)
+
+    # Mount static frontend GUI if present
+    frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+    if frontend_dir.exists():
+        application.mount(
+            "/ui",
+            StaticFiles(directory=str(frontend_dir), html=True),
+            name="ui",
+        )
+
+        @application.get("/", include_in_schema=False)
+        async def root_redirect() -> RedirectResponse:
+            return RedirectResponse(url="/ui/")
 
     @application.get(
         "/health",
