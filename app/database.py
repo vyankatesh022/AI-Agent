@@ -28,6 +28,11 @@ SessionLocal = sessionmaker(
 Base = declarative_base()
 
 
+def get_engine():
+    """Return the primary SQLAlchemy database engine."""
+    return engine
+
+
 def get_db() -> Generator[Session, None, None]:
     """FastAPI dependency providing a transactional database session per request."""
     db = SessionLocal()

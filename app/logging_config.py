@@ -10,23 +10,40 @@ Designed for production reliability and future observability:
 import logging
 import sys
 
+from app.observability.logging import SensitiveDataScrubber
+from app.observability.telemetry import (
+    current_request_id,
+    get_current_telemetry,
+)
+
 
 class ContextFilter(logging.Filter):
     """Filter that ensures standard contextual attributes exist on every LogRecord.
 
-    Prepares the logging infrastructure for future sessions (Session 6 observability):
+    Observability integration:
     - request_id: Unique correlation ID for tracing distributed requests.
-    - user_id: Authenticated user identifier (added in Session 2).
-    - session_id: Conversation session identifier (added in Session 3-5).
+    - user_id: Authenticated user identifier.
+    - session_id: Conversation session identifier.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:
-        if not hasattr(record, "request_id"):
+        req_id = current_request_id.get()
+        if req_id:
+            record.request_id = req_id
+        elif not hasattr(record, "request_id"):
             record.request_id = "-"
-        if not hasattr(record, "user_id"):
+
+        telem = get_current_telemetry()
+        if telem and telem.user_id:
+            record.user_id = telem.user_id
+        elif not hasattr(record, "user_id"):
             record.user_id = "-"
-        if not hasattr(record, "session_id"):
+
+        if telem and telem.session_id:
+            record.session_id = telem.session_id
+        elif not hasattr(record, "session_id"):
             record.session_id = "-"
+
         return True
 
 
@@ -50,6 +67,7 @@ def setup_logging(log_level: str = "INFO") -> None:
     handler.setLevel(numeric_level)
     handler.setFormatter(formatter)
     handler.addFilter(ContextFilter())
+    handler.addFilter(SensitiveDataScrubber())
 
     root_logger = logging.getLogger()
     root_logger.setLevel(numeric_level)

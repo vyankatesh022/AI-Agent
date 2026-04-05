@@ -23,6 +23,14 @@ class LLMFactory:
     _custom_providers: ClassVar[dict[str, BaseLLMProvider]] = {}
 
     @classmethod
+    def is_provider_supported(cls, provider: str) -> bool:
+        """Check if provider is in built-in allowlist or registered custom test providers."""
+        normalized = provider.strip().lower()
+        return (
+            normalized in cls.SUPPORTED_PROVIDERS or normalized in cls._custom_providers
+        )
+
+    @classmethod
     def register_provider(cls, name: str, provider: BaseLLMProvider) -> None:
         """Register a custom or mock provider (useful for deterministic tests)."""
         cls._custom_providers[name.lower()] = provider

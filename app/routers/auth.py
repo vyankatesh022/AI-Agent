@@ -1,5 +1,6 @@
 """Authentication router handling registration, login, and user profile."""
 
+import logging
 from datetime import timedelta
 from typing import Annotated
 
@@ -10,9 +11,16 @@ from app.config import Settings, get_settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import User
+from app.observability import log_security_event
 from app.schemas import TokenResponse, UserLogin, UserRegister, UserResponse
-from app.security import create_access_token, hash_password, verify_password
+from app.security import (
+    RateLimitChecker,
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
@@ -21,6 +29,9 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user account",
+    dependencies=[
+        Depends(RateLimitChecker("register", "RATE_LIMIT_REGISTER_PER_MINUTE", "ip"))
+    ],
 )
 def register(
     payload: UserRegister,
@@ -55,6 +66,9 @@ def register(
     "/login",
     response_model=TokenResponse,
     summary="Authenticate and obtain access token",
+    dependencies=[
+        Depends(RateLimitChecker("login", "RATE_LIMIT_LOGIN_PER_MINUTE", "ip"))
+    ],
 )
 def login(
     payload: UserLogin,
@@ -66,6 +80,11 @@ def login(
 
     user = db.query(User).filter(User.email == normalized_email).first()
     if not user or not verify_password(payload.password, user.password_hash):
+        log_security_event(
+            event_type="LOGIN_FAILED",
+            severity="WARNING",
+            details={"email": normalized_email},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",

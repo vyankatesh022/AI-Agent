@@ -1,0 +1,32 @@
+# Core FastAPI & ASGI Server
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# Validation & Settings
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+email-validator>=2.1.0
+
+# Database & ORM
+sqlalchemy>=2.0.0
+psycopg[binary]>=3.1.0
+
+# Cryptography & Security
+argon2-cffi>=23.1.0
+pyjwt>=2.8.0
+
+# Agent Framework & LLM Integrations
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langchain-google-genai>=2.0.0
+
+# RAG, Vector Search & Document Processing
+faiss-cpu>=1.9.0
+pypdf>=5.0.0
+langchain-text-splitters>=0.3.0
+numpy>=1.26.0
+
+# Testing & Code Quality
+pytest>=8.0.0

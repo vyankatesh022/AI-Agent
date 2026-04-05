@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         description="Name of the service",
     )
     APP_VERSION: str = Field(
-        default="0.5.0",
+        default="0.6.0",
         description="Semantic version of the application",
     )
     ENVIRONMENT: str = Field(
@@ -159,6 +159,70 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = Field(
         default="text-embedding-004",
         description="Model name for generating vector embeddings",
+    )
+
+    # Security & Rate Limiting Settings (Session 6)
+    RATE_LIMIT_ENABLED: bool = Field(
+        default=True,
+        description="Master switch for in-memory rate limiting",
+    )
+    RATE_LIMIT_LOGIN_PER_MINUTE: int = Field(
+        default=5,
+        ge=1,
+        le=600,
+        description="Maximum login attempts per minute per IP",
+    )
+    RATE_LIMIT_REGISTER_PER_MINUTE: int = Field(
+        default=3,
+        ge=1,
+        le=600,
+        description="Maximum registration attempts per minute per IP",
+    )
+    RATE_LIMIT_AGENT_PER_MINUTE: int = Field(
+        default=20,
+        ge=1,
+        le=600,
+        description="Maximum agent chat queries per minute per user",
+    )
+    RATE_LIMIT_UPLOAD_PER_MINUTE: int = Field(
+        default=10,
+        ge=1,
+        le=600,
+        description="Maximum document uploads per minute per user",
+    )
+    RATE_LIMIT_DEFAULT_PER_MINUTE: int = Field(
+        default=60,
+        ge=1,
+        le=1200,
+        description="Default rate limit per minute",
+    )
+    MAX_REQUEST_SIZE_MB: int = Field(
+        default=15,
+        ge=1,
+        le=100,
+        description="Maximum allowable incoming HTTP request payload in megabytes",
+    )
+    MAX_MESSAGE_LENGTH: int = Field(
+        default=4000,
+        ge=10,
+        le=32000,
+        description="Maximum allowed characters in a single chat message",
+    )
+    MAX_TOOL_CALLS_PER_REQUEST: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum allowed tool executions per user request",
+    )
+    MAX_AGENT_GRAPH_ITERATIONS: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum graph recursion limit for LangGraph execution",
+    )
+    CORS_ALLOWED_ORIGINS: str = Field(
+        default="http://localhost:8000,http://127.0.0.1:8000,http://localhost:3000,http://127.0.0.1:3000",
+        description="Comma-separated allowlist of origins permitted for CORS",
     )
 
     @field_validator("LLM_PROVIDER")

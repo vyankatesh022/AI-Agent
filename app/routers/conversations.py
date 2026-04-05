@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Conversation, Message, User
+from app.observability import log_security_event
 from app.schemas import (
     ConversationCreate,
     ConversationResponse,
@@ -74,8 +75,17 @@ def get_conversation(
         db.query(Conversation).filter(Conversation.id == conversation_id).first()
     )
 
-    # Enforce isolation: return 404 if not found or not owned by the current user
     if not conversation or conversation.user_id != current_user.id:
+        if conversation and conversation.user_id != current_user.id:
+            log_security_event(
+                event_type="UNAUTHORIZED_ACCESS_ATTEMPT",
+                severity="WARNING",
+                details={
+                    "resource": "conversation",
+                    "target_conversation_id": str(conversation_id),
+                },
+                user_id=str(current_user.id),
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Conversation not found",
@@ -100,6 +110,16 @@ def list_conversation_messages(
     )
 
     if not conversation or conversation.user_id != current_user.id:
+        if conversation and conversation.user_id != current_user.id:
+            log_security_event(
+                event_type="UNAUTHORIZED_ACCESS_ATTEMPT",
+                severity="WARNING",
+                details={
+                    "resource": "conversation_messages",
+                    "target_conversation_id": str(conversation_id),
+                },
+                user_id=str(current_user.id),
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Conversation not found",

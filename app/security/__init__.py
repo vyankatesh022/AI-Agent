@@ -1,4 +1,4 @@
-"""Cryptographic utilities for password hashing and JWT authentication."""
+"""Cryptographic utilities and security hardening abstractions."""
 
 import logging
 from datetime import datetime, timedelta, timezone
@@ -7,6 +7,24 @@ from typing import Any
 import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerifyMismatchError
+
+from app.security.errors import (
+    AppSecurityException,
+    ErrorCode,
+    PromptInjectionError,
+    RateLimitExceededError,
+    ToolAuthorizationError,
+)
+from app.security.headers import SecurityHeadersMiddleware
+from app.security.prompt_guard import PromptGuard
+from app.security.rate_limit import (
+    RateLimitChecker,
+    SlidingWindowRateLimiter,
+    get_client_ip,
+    limiter,
+)
+from app.security.request_size import RequestSizeLimitMiddleware
+from app.security.tool_policy import ToolPolicyEnforcer
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +60,7 @@ def create_access_token(
     The payload only contains the minimal necessary identity information:
     - sub: subject (user UUID)
     - exp: expiration timestamp
+    - iat: issued-at timestamp
     """
     now = datetime.now(timezone.utc)
     expire = now + (expires_delta if expires_delta else timedelta(hours=24))
@@ -62,3 +81,25 @@ def decode_access_token(token: str, secret_key: str) -> dict[str, Any]:
         jwt.PyJWTError: If the token is invalid, expired, or malformed.
     """
     return jwt.decode(token, secret_key, algorithms=[ALGORITHM])
+
+
+__all__ = [
+    "ALGORITHM",
+    "AppSecurityException",
+    "ErrorCode",
+    "PromptGuard",
+    "PromptInjectionError",
+    "RateLimitChecker",
+    "RateLimitExceededError",
+    "RequestSizeLimitMiddleware",
+    "SecurityHeadersMiddleware",
+    "SlidingWindowRateLimiter",
+    "ToolAuthorizationError",
+    "ToolPolicyEnforcer",
+    "create_access_token",
+    "decode_access_token",
+    "get_client_ip",
+    "hash_password",
+    "limiter",
+    "verify_password",
+]

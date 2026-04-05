@@ -12,7 +12,8 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.documents.service import DocumentService
 from app.llm.factory import LLMFactory
-from app.models import User
+from app.models import Document, User
+from app.observability import log_security_event
 from app.rag.pipeline import RAGPipeline
 from app.schemas import (
     DocumentListResponse,
@@ -20,6 +21,7 @@ from app.schemas import (
     RAGQueryRequest,
     RAGQueryResponse,
 )
+from app.security import RateLimitChecker
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,9 @@ router = APIRouter(prefix="/documents", tags=["Documents & RAG"])
     response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Upload and index a PDF document for RAG",
+    dependencies=[
+        Depends(RateLimitChecker("upload", "RATE_LIMIT_UPLOAD_PER_MINUTE", "user"))
+    ],
 )
 async def upload_document(
     file: Annotated[
@@ -115,6 +120,17 @@ def get_document(
         db=db, user_id=current_user.id, document_id=document_id
     )
     if not doc:
+        doc_any = db.query(Document).filter(Document.id == document_id).first()
+        if doc_any and doc_any.user_id != current_user.id:
+            log_security_event(
+                event_type="UNAUTHORIZED_ACCESS_ATTEMPT",
+                severity="WARNING",
+                details={
+                    "resource": "document",
+                    "target_document_id": str(document_id),
+                },
+                user_id=str(current_user.id),
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found",
@@ -137,6 +153,17 @@ def delete_document(
         db=db, user_id=current_user.id, document_id=document_id
     )
     if not deleted:
+        doc_any = db.query(Document).filter(Document.id == document_id).first()
+        if doc_any and doc_any.user_id != current_user.id:
+            log_security_event(
+                event_type="UNAUTHORIZED_ACCESS_ATTEMPT",
+                severity="WARNING",
+                details={
+                    "resource": "document",
+                    "target_document_id": str(document_id),
+                },
+                user_id=str(current_user.id),
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found",

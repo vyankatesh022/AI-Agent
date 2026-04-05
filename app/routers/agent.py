@@ -13,12 +13,14 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.llm.factory import LLMFactory
 from app.models import Conversation, Message, User
+from app.observability import get_current_telemetry, log_security_event
 from app.schemas import (
     AgentChatRequest,
     AgentChatResponse,
     ModelsResponse,
     ProviderModels,
 )
+from app.security import PromptGuard, RateLimitChecker
 from app.tools.base import ToolRegistry
 from app.tools.safe_database import SafeDatabaseTool
 
@@ -61,6 +63,9 @@ async def list_models(
     "/chat",
     response_model=AgentChatResponse,
     summary="Send a message to the LangGraph AI Agent",
+    dependencies=[
+        Depends(RateLimitChecker("agent", "RATE_LIMIT_AGENT_PER_MINUTE", "user"))
+    ],
 )
 async def chat(
     payload: AgentChatRequest,
@@ -69,13 +74,31 @@ async def chat(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> AgentChatResponse:
     """Execute user query through the LangGraph agent with strict tenant isolation."""
-    # 1. Verify conversation exists and belongs exclusively to the caller
+    # 0. Enforce max message length
+    raw_message = payload.message.strip()
+    if len(raw_message) > settings.MAX_MESSAGE_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Message exceeds maximum allowed length of {settings.MAX_MESSAGE_LENGTH} characters.",
+        )
+
+    # 1. Verify conversation exists and belongs exclusively to the caller (IDOR defense)
     conversation = (
         db.query(Conversation)
         .filter(Conversation.id == payload.conversation_id)
         .first()
     )
     if not conversation or conversation.user_id != current_user.id:
+        if conversation and conversation.user_id != current_user.id:
+            log_security_event(
+                event_type="UNAUTHORIZED_ACCESS_ATTEMPT",
+                severity="WARNING",
+                details={
+                    "resource": "conversation",
+                    "target_conversation_id": str(payload.conversation_id),
+                },
+                user_id=str(current_user.id),
+            )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Conversation not found",
@@ -83,7 +106,7 @@ async def chat(
 
     # 2. Validate optional request-level provider and model against allowlists
     target_provider = (payload.provider or settings.LLM_PROVIDER).strip().lower()
-    if target_provider not in LLMFactory.SUPPORTED_PROVIDERS:
+    if not LLMFactory.is_provider_supported(target_provider):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
@@ -103,16 +126,55 @@ async def chat(
                 ),
             )
 
-    # 3. Persist user's message before invoking agent
+    # 3. Check for prompt injection or system prompt disclosure attempts
+    is_injection, reason = PromptGuard.detect_injection(raw_message)
+    is_disclosure = PromptGuard.is_disclosure_attempt(raw_message)
+    if is_injection or is_disclosure:
+        violation_reason = reason or "System prompt disclosure attempt"
+        log_security_event(
+            event_type="PROMPT_INJECTION_DETECTED",
+            severity="WARNING",
+            details={
+                "snippet": raw_message[:100],
+                "reason": violation_reason,
+            },
+            user_id=str(current_user.id),
+        )
+        # Persist conversation turn with safe refusal
+        user_msg = Message(
+            conversation_id=conversation.id,
+            role="user",
+            content=raw_message,
+        )
+        assistant_msg = Message(
+            conversation_id=conversation.id,
+            role="assistant",
+            content=PromptGuard.REFUSAL_MESSAGE,
+        )
+        db.add_all([user_msg, assistant_msg])
+        db.commit()
+
+        return AgentChatResponse(
+            conversation_id=conversation.id,
+            message=PromptGuard.REFUSAL_MESSAGE,
+            role="assistant",
+            intent="general_chat",
+            provider=target_provider,
+            model=payload.model or target_provider,
+            citations=None,
+            sources=None,
+        )
+
+    # 4. Persist user's message before invoking agent
     user_msg = Message(
         conversation_id=conversation.id,
         role="user",
-        content=payload.message.strip(),
+        content=raw_message,
     )
     db.add(user_msg)
     db.commit()
 
-    # 4. Resolve LLM provider through abstraction factory
+    # 5. Resolve LLM provider through abstraction factory
     try:
         llm_provider = LLMFactory.create_provider(
             provider_name=target_provider,
@@ -126,11 +188,11 @@ async def chat(
             detail="Language model provider is not properly configured.",
         ) from exc
 
-    # 5. Initialize tool registry with authorized tools
+    # 6. Initialize tool registry with authorized tools
     tool_registry = ToolRegistry()
     tool_registry.register(SafeDatabaseTool())
 
-    # 6. Build and invoke LangGraph state graph
+    # 7. Build and invoke LangGraph state graph with recursion limit
     graph = build_agent_graph(
         llm_provider=llm_provider,
         tool_registry=tool_registry,
@@ -139,7 +201,7 @@ async def chat(
     )
 
     initial_state: AgentState = {
-        "messages": [{"role": "user", "content": payload.message.strip()}],
+        "messages": [{"role": "user", "content": raw_message}],
         "user_id": str(current_user.id),
         "conversation_id": str(conversation.id),
         "intent": "unknown",
@@ -156,7 +218,10 @@ async def chat(
     }
 
     try:
-        result = await graph.ainvoke(initial_state)
+        result = await graph.ainvoke(
+            initial_state,
+            config={"recursion_limit": settings.MAX_AGENT_GRAPH_ITERATIONS},
+        )
     except Exception as exc:
         logger.error("LangGraph agent execution error: %s", exc)
         raise HTTPException(
@@ -169,7 +234,7 @@ async def chat(
         or "I was unable to complete the request. Please try again."
     )
 
-    # 7. Persist assistant response
+    # 8. Persist assistant response
     assistant_msg = Message(
         conversation_id=conversation.id,
         role="assistant",
@@ -177,6 +242,20 @@ async def chat(
     )
     db.add(assistant_msg)
     db.commit()
+
+    # 9. Update Telemetry
+    telemetry = get_current_telemetry()
+    if telemetry:
+        telemetry.user_id = str(current_user.id)
+        telemetry.session_id = str(conversation.id)
+        telemetry.provider = llm_provider.provider_name
+        telemetry.model = llm_provider.model_name
+        telemetry.intent = result.get("intent")
+        telemetry.retry_count = result.get("retry_count", 0)
+        if result.get("tool_name"):
+            telemetry.tool_calls.append(result["tool_name"])
+        if result.get("sources"):
+            telemetry.retrieval_count = len(result["sources"])
 
     # Safe log of operational metadata
     logger.info(

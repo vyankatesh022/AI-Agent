@@ -15,6 +15,7 @@ from app.agent.state import AgentState
 from app.llm.base import BaseLLMProvider
 from app.memory.service import ConversationMemoryService
 from app.rag.pipeline import RAGPipeline
+from app.security.tool_policy import ToolPolicyEnforcer
 from app.tools.base import ToolRegistry
 
 logger = logging.getLogger(__name__)
@@ -180,8 +181,9 @@ async def execute_tool_node(
     state: AgentState,
     tool_registry: ToolRegistry,
     db: Session,
+    tool_policy: ToolPolicyEnforcer | None = None,
 ) -> dict[str, Any]:
-    """Execute authorized tool under caller's tenant boundary."""
+    """Execute authorized tool under caller's tenant boundary with policy enforcement."""
     tool_name = state.get("tool_name", "safe_database")
     user_id_str = state.get("user_id")
 
@@ -196,12 +198,18 @@ async def execute_tool_node(
         operation = state.get("tool_operation") or "get_current_user_profile"
         conversation_id = state.get("conversation_id")
 
-        result = await tool_registry.execute_tool(
+        enforcer = tool_policy or ToolPolicyEnforcer()
+        validated_kwargs = enforcer.validate_and_authorize(
             tool_name=tool_name,
             user_id=user_uuid,
             operation=operation,
             conversation_id=conversation_id,
             db_session=db,
+        )
+
+        result = await tool_registry.execute_tool(
+            tool_name=tool_name,
+            **validated_kwargs,
         )
         return {"tool_result": result, "error": None}
     except Exception as exc:
