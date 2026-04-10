@@ -43,7 +43,7 @@ class GeminiProvider(BaseLLMProvider):
 
     def _convert_messages(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         system_prompt: str | None = None,
     ) -> list[BaseMessage]:
         lc_messages: list[BaseMessage] = []
@@ -53,18 +53,36 @@ class GeminiProvider(BaseLLMProvider):
         for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
+            image_url = msg.get("image")
+
             if role == "system":
-                lc_messages.append(SystemMessage(content=content))
+                lc_messages.append(SystemMessage(content=str(content)))
             elif role == "assistant":
-                lc_messages.append(AIMessage(content=content))
+                lc_messages.append(AIMessage(content=str(content)))
             else:
-                lc_messages.append(HumanMessage(content=content))
+                if image_url:
+                    text_str = str(content) if content else "Describe this image."
+                    lc_messages.append(
+                        HumanMessage(
+                            content=[
+                                {"type": "text", "text": text_str},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": str(image_url)},
+                                },
+                            ]
+                        )
+                    )
+                elif isinstance(content, list):
+                    lc_messages.append(HumanMessage(content=content))
+                else:
+                    lc_messages.append(HumanMessage(content=str(content)))
 
         return lc_messages
 
     async def generate_response(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         system_prompt: str | None = None,
         **kwargs: Any,
     ) -> str:
@@ -74,7 +92,7 @@ class GeminiProvider(BaseLLMProvider):
 
     async def generate_with_tools(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         tools: list[Any],
         system_prompt: str | None = None,
         **kwargs: Any,

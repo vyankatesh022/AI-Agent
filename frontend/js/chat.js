@@ -85,13 +85,17 @@ class ChatService {
 
   /**
    * Send a user message to the LangGraph agent.
+   * @param {string} text - User message content.
+   * @param {string|null} [provider=null] - Optional LLM provider override.
+   * @param {string|null} [model=null] - Optional LLM model override.
+   * @param {string|null} [imageDataUrl=null] - Optional base64 data URL for multimodal input.
    */
-  async sendMessage(text, provider = null, model = null) {
-    if (!this.currentConversationId || !text.trim() || this.isSending) {
+  async sendMessage(text, provider = null, model = null, imageDataUrl = null) {
+    const trimmedText = (text || "").trim();
+    if (!this.currentConversationId || (!trimmedText && !imageDataUrl) || this.isSending) {
       return;
     }
 
-    const trimmedText = text.trim();
     this.isSending = true;
     this._setControlsDisabled(true);
 
@@ -100,6 +104,7 @@ class ChatService {
       id: `temp-${Date.now()}`,
       role: "user",
       content: trimmedText,
+      image: imageDataUrl || null,
       created_at: new Date().toISOString(),
     };
     this.messages.push(optimisticUserMsg);
@@ -121,6 +126,9 @@ class ChatService {
         conversation_id: this.currentConversationId,
         message: trimmedText,
       };
+      if (imageDataUrl) {
+        payload.image = imageDataUrl;
+      }
       if (provider) payload.provider = provider;
       if (model) payload.model = model;
 
@@ -242,7 +250,29 @@ class ChatService {
       bubble.style.backgroundColor = "var(--status-error-bg)";
       bubble.style.color = "var(--status-error)";
     }
-    bubble.innerHTML = this._formatSafeContent(msg.content);
+
+    // Multimodal attached image rendering
+    if (msg.image) {
+      const imgContainer = document.createElement("div");
+      imgContainer.className = "message-image-container";
+      const imgEl = document.createElement("img");
+      imgEl.className = "message-image-thumb";
+      imgEl.src = msg.image;
+      imgEl.alt = "Attached image";
+      imgEl.loading = "lazy";
+      imgEl.title = "Click to open full image";
+      imgEl.addEventListener("click", () => {
+        window.open(msg.image, "_blank");
+      });
+      imgContainer.appendChild(imgEl);
+      bubble.appendChild(imgContainer);
+    }
+
+    if (msg.content) {
+      const textSpan = document.createElement("div");
+      textSpan.innerHTML = this._formatSafeContent(msg.content);
+      bubble.appendChild(textSpan);
+    }
 
     // Citations / Sources rendering
     const citationsList = msg.citations || msg.sources;
@@ -356,7 +386,7 @@ class ChatService {
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
         </svg>
         <h3>No messages yet</h3>
-        <p>Ask a question, request account analysis, or query uploaded documents.</p>
+        <p>Ask a question, analyze an image, or request account data.</p>
       `;
       container.appendChild(empty);
       return;

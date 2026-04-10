@@ -16,6 +16,11 @@ from app.security.errors import (
     ToolAuthorizationError,
 )
 from app.security.headers import SecurityHeadersMiddleware
+from app.security.image_validator import (
+    ImageValidationError,
+    ImageValidator,
+    ValidatedImage,
+)
 from app.security.prompt_guard import PromptGuard
 from app.security.rate_limit import (
     RateLimitChecker,
@@ -87,6 +92,8 @@ __all__ = [
     "ALGORITHM",
     "AppSecurityException",
     "ErrorCode",
+    "ImageValidationError",
+    "ImageValidator",
     "PromptGuard",
     "PromptInjectionError",
     "RateLimitChecker",
@@ -96,6 +103,7 @@ __all__ = [
     "SlidingWindowRateLimiter",
     "ToolAuthorizationError",
     "ToolPolicyEnforcer",
+    "ValidatedImage",
     "create_access_token",
     "decode_access_token",
     "get_client_ip",

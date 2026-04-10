@@ -20,7 +20,7 @@ from app.schemas import (
     ModelsResponse,
     ProviderModels,
 )
-from app.security import PromptGuard, RateLimitChecker
+from app.security import ImageValidator, PromptGuard, RateLimitChecker
 from app.tools.base import ToolRegistry
 from app.tools.safe_database import SafeDatabaseTool
 
@@ -50,10 +50,20 @@ async def list_models(
             "gemini": ProviderModels(
                 name="Google Gemini",
                 models=sorted(LLMFactory.ALLOWED_MODELS.get("gemini", set())),
+                vision_models=sorted(
+                    LLMFactory.VISION_MODELS.intersection(
+                        LLMFactory.ALLOWED_MODELS.get("gemini", set())
+                    )
+                ),
             ),
             "openai": ProviderModels(
                 name="OpenAI",
                 models=sorted(LLMFactory.ALLOWED_MODELS.get("openai", set())),
+                vision_models=sorted(
+                    LLMFactory.VISION_MODELS.intersection(
+                        LLMFactory.ALLOWED_MODELS.get("openai", set())
+                    )
+                ),
             ),
         },
     )
@@ -126,25 +136,47 @@ async def chat(
                 ),
             )
 
-    # 3. Check for prompt injection or system prompt disclosure attempts
-    is_injection, reason = PromptGuard.detect_injection(raw_message)
-    is_disclosure = PromptGuard.is_disclosure_attempt(raw_message)
+    # 3. Validate optional image attachment & verify model vision compatibility
+    validated_img = None
+    if payload.image:
+        validated_img = ImageValidator.validate(payload.image)
+        effective_model = payload.model or (
+            settings.GEMINI_MODEL
+            if target_provider == "gemini"
+            else settings.OPENAI_MODEL
+        )
+        if not LLMFactory.supports_vision(target_provider, effective_model):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"The selected model '{effective_model}' does not support image input. "
+                    "Please choose a vision-capable model (e.g. gpt-4o, gemini-2.0-flash) or remove the image."
+                ),
+            )
+
+    # 4. Check for prompt injection or system prompt disclosure attempts
+    prompt_text = raw_message if raw_message else "Describe this image."
+    is_injection, reason = PromptGuard.detect_injection(prompt_text)
+    is_disclosure = PromptGuard.is_disclosure_attempt(prompt_text)
     if is_injection or is_disclosure:
         violation_reason = reason or "System prompt disclosure attempt"
         log_security_event(
             event_type="PROMPT_INJECTION_DETECTED",
             severity="WARNING",
             details={
-                "snippet": raw_message[:100],
+                "snippet": prompt_text[:100],
                 "reason": violation_reason,
             },
             user_id=str(current_user.id),
         )
         # Persist conversation turn with safe refusal
+        persisted_user_content = (
+            f"{prompt_text} [Image Attached]" if validated_img else prompt_text
+        )
         user_msg = Message(
             conversation_id=conversation.id,
             role="user",
-            content=raw_message,
+            content=persisted_user_content,
         )
         assistant_msg = Message(
             conversation_id=conversation.id,
@@ -165,16 +197,21 @@ async def chat(
             sources=None,
         )
 
-    # 4. Persist user's message before invoking agent
+    # 5. Persist user's message before invoking agent (never persist raw image bytes in DB)
+    persisted_user_content = (
+        f"{raw_message} [Image Attached]"
+        if (validated_img and raw_message)
+        else ("[Attached Image]" if validated_img else raw_message)
+    )
     user_msg = Message(
         conversation_id=conversation.id,
         role="user",
-        content=raw_message,
+        content=persisted_user_content,
     )
     db.add(user_msg)
     db.commit()
 
-    # 5. Resolve LLM provider through abstraction factory
+    # 6. Resolve LLM provider through abstraction factory
     try:
         llm_provider = LLMFactory.create_provider(
             provider_name=target_provider,
@@ -188,11 +225,11 @@ async def chat(
             detail="Language model provider is not properly configured.",
         ) from exc
 
-    # 6. Initialize tool registry with authorized tools
+    # 7. Initialize tool registry with authorized tools
     tool_registry = ToolRegistry()
     tool_registry.register(SafeDatabaseTool())
 
-    # 7. Build and invoke LangGraph state graph with recursion limit
+    # 8. Build and invoke LangGraph state graph with recursion limit
     graph = build_agent_graph(
         llm_provider=llm_provider,
         tool_registry=tool_registry,
@@ -201,7 +238,7 @@ async def chat(
     )
 
     initial_state: AgentState = {
-        "messages": [{"role": "user", "content": raw_message}],
+        "messages": [{"role": "user", "content": prompt_text}],
         "user_id": str(current_user.id),
         "conversation_id": str(conversation.id),
         "intent": "unknown",
@@ -215,6 +252,7 @@ async def chat(
         "final_response": None,
         "citations": None,
         "sources": None,
+        "image": validated_img.data_url if validated_img else None,
     }
 
     try:
@@ -256,15 +294,20 @@ async def chat(
             telemetry.tool_calls.append(result["tool_name"])
         if result.get("sources"):
             telemetry.retrieval_count = len(result["sources"])
+        if validated_img:
+            telemetry.has_image = True
+            telemetry.image_size_bytes = validated_img.size_bytes
 
-    # Safe log of operational metadata
+    # Safe log of operational metadata (never logs image pixels or base64)
     logger.info(
-        "Agent completed request: user=%s conv=%s provider=%s intent=%s retries=%d",
+        "Agent completed request: user=%s conv=%s provider=%s intent=%s retries=%d has_image=%s image_bytes=%d",
         current_user.id,
         conversation.id,
         llm_provider.provider_name,
         result.get("intent", "general_chat"),
         result.get("retry_count", 0),
+        bool(validated_img),
+        validated_img.size_bytes if validated_img else 0,
     )
 
     raw_citations = result.get("citations")

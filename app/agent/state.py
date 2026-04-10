@@ -11,7 +11,7 @@ class AgentState(TypedDict):
     - Only tracks operational parameters, message context, and runtime diagnostics.
     """
 
-    messages: list[dict[str, str]]
+    messages: list[dict[str, Any]]
     user_id: str
     conversation_id: str
     intent: str
@@ -25,3 +25,4 @@ class AgentState(TypedDict):
     final_response: str | None
     citations: list[dict[str, Any]] | None
     sources: list[dict[str, Any]] | None
+    image: str | None

@@ -10,6 +10,7 @@ import { chat } from "./chat.js";
 import { CONFIG } from "./config.js";
 import { conversations } from "./conversations.js";
 import { documents } from "./documents.js";
+import { imageService } from "./image.js";
 import { ui } from "./ui.js";
 
 class App {
@@ -18,6 +19,10 @@ class App {
     this.availableModels = null;
     this.selectedProvider = CONFIG.DEFAULT_PROVIDER;
     this.selectedModel = CONFIG.DEFAULT_MODEL;
+    this.attachedImage = null;
+    this._pendingOriginalFile = null;
+    this._pendingOriginalMeta = null;
+    this._pendingCompressedResult = null;
   }
 
   async init() {
@@ -43,9 +48,8 @@ class App {
       }
     });
 
-    // 5. Load conversations and documents
+    // 5. Load conversations
     await conversations.loadConversations();
-    await documents.loadDocuments();
 
     // 6. Select first conversation or prompt for new one
     if (conversations.conversations.length > 0) {
@@ -125,7 +129,125 @@ class App {
       this.selectedProvider = prov;
       this.selectedModel = mod;
       ui.showToast(`Active model changed to: ${mod}`, "info", 2000);
+
+      // Warn if user currently has an image attached but switched to non-vision model
+      if (this.attachedImage && !this._isVisionModelSelected()) {
+        ui.showToast(
+          `Warning: Model "${mod}" does not support image analysis. Switching back to a vision model (e.g. gemini-2.0-flash, gpt-4o) is recommended.`,
+          "warning",
+          5000
+        );
+      }
     });
+  }
+
+  /**
+   * Determine if the currently selected model supports image analysis.
+   * @private
+   * @returns {boolean}
+   */
+  _isVisionModelSelected() {
+    if (!this.availableModels?.providers) return true;
+    const providerData = this.availableModels.providers[this.selectedProvider];
+    if (!providerData?.vision_models) return true;
+    return providerData.vision_models.includes(this.selectedModel);
+  }
+
+  /**
+   * Attach an image file to the chat composer tray.
+   * @private
+   */
+  async _attachImageFile(file, isOptimized, details) {
+    try {
+      const dataUrl = await imageService.fileToDataUrl(file);
+
+      this.attachedImage = {
+        file,
+        dataUrl,
+        isOptimized,
+        width: details.width,
+        height: details.height,
+        sizeFormatted: imageService.formatBytes(file.size),
+      };
+
+      // Populate preview tray elements
+      const previewTray = document.getElementById("chat-image-preview");
+      const thumbImg = document.getElementById("chat-image-thumb");
+      const nameEl = document.getElementById("chat-image-name");
+      const dimsEl = document.getElementById("chat-image-dimensions");
+      const sizeEl = document.getElementById("chat-image-size");
+      const badgeEl = document.getElementById("chat-image-status-badge");
+      const reoptBtn = document.getElementById("chat-image-reoptimize-btn");
+
+      if (thumbImg) thumbImg.src = dataUrl;
+      if (nameEl) nameEl.textContent = file.name;
+      if (dimsEl) dimsEl.textContent = `${details.width} × ${details.height}`;
+      if (sizeEl) sizeEl.textContent = imageService.formatBytes(file.size);
+
+      if (badgeEl) {
+        if (isOptimized) {
+          badgeEl.className = "badge badge-success";
+          const reduction = details.reductionPercent ? ` (-${details.reductionPercent}%)` : "";
+          badgeEl.textContent = `Optimized${reduction}`;
+        } else {
+          badgeEl.className = "badge badge-info";
+          badgeEl.textContent = "Original";
+        }
+      }
+
+      if (reoptBtn) {
+        reoptBtn.style.display = isOptimized ? "none" : "inline-flex";
+      }
+
+      if (previewTray) {
+        previewTray.style.display = "flex";
+      }
+
+      // Vision model compatibility feedback
+      if (!this._isVisionModelSelected()) {
+        ui.showToast(
+          `Notice: Model "${this.selectedModel}" does not support vision. Please switch to a vision model (e.g. gemini-2.0-flash, gpt-4o).`,
+          "warning",
+          5000
+        );
+      } else {
+        ui.showToast(
+          isOptimized
+            ? `Optimized image attached (${imageService.formatBytes(file.size)})`
+            : `Image attached (${imageService.formatBytes(file.size)})`,
+          "success",
+          2500
+        );
+      }
+    } catch (err) {
+      ui.showToast(`Failed to attach image: ${err.message}`, "error");
+      this._clearAttachedImage();
+    }
+  }
+
+  /**
+   * Reset attached image and hide preview tray.
+   * @private
+   */
+  _clearAttachedImage() {
+    this.attachedImage = null;
+
+    const previewTray = document.getElementById("chat-image-preview");
+    if (previewTray) previewTray.style.display = "none";
+
+    const chatImageInput = document.getElementById("chat-image-input");
+    if (chatImageInput) chatImageInput.value = "";
+  }
+
+  /**
+   * Safely clean up modal comparison thumbnails.
+   * @private
+   */
+  _cleanupPendingModalUrls() {
+    const origImg = document.getElementById("compression-orig-img");
+    const optImg = document.getElementById("compression-opt-img");
+    if (origImg) origImg.src = "";
+    if (optImg) optImg.src = "";
   }
 
   /**
@@ -148,9 +270,24 @@ class App {
     const submitCurrentMessage = async () => {
       if (!chatInput) return;
       const text = chatInput.value;
-      if (!text.trim()) return;
+      const hasImage = Boolean(this.attachedImage?.dataUrl);
 
-      await chat.sendMessage(text, this.selectedProvider, this.selectedModel);
+      if (!text.trim() && !hasImage) return;
+
+      // Check vision capability
+      if (hasImage && !this._isVisionModelSelected()) {
+        ui.showToast(
+          `Current model "${this.selectedModel}" does not support images. Please switch to a vision model (e.g. gemini-2.0-flash, gpt-4o).`,
+          "error",
+          4500
+        );
+        return;
+      }
+
+      const imageDataUrl = this.attachedImage ? this.attachedImage.dataUrl : null;
+      this._clearAttachedImage();
+
+      await chat.sendMessage(text, this.selectedProvider, this.selectedModel, imageDataUrl);
     };
 
     if (sendBtn) {
@@ -210,6 +347,189 @@ class App {
       });
     }
 
+    // Image Attachment & Client-Side Compression Handlers
+    const chatImageBtn = document.getElementById("chat-image-btn");
+    const chatImageInput = document.getElementById("chat-image-input");
+    const compressionModal = document.getElementById("image-compression-modal");
+    const compressionCloseBtn = document.getElementById("compression-modal-close");
+    const compressionCancelBtn = document.getElementById("compression-cancel-btn");
+    const compressionKeepOrigBtn = document.getElementById("compression-keep-orig-btn");
+    const compressionApplyBtn = document.getElementById("compression-apply-btn");
+    const imageRemoveBtn = document.getElementById("chat-image-remove-btn");
+    const imageReoptBtn = document.getElementById("chat-image-reoptimize-btn");
+
+    if (chatImageBtn && chatImageInput) {
+      chatImageBtn.addEventListener("click", () => {
+        chatImageInput.click();
+      });
+
+      chatImageInput.addEventListener("change", async () => {
+        const file = chatImageInput.files[0];
+        if (!file) return;
+
+        // 1. Initial client-side validation
+        const val = imageService.validateFile(file);
+        if (!val.valid) {
+          ui.showToast(val.error, "error");
+          chatImageInput.value = "";
+          return;
+        }
+
+        try {
+          // 2. Decode and inspect metadata
+          const meta = await imageService.getImageMetadata(file);
+
+          // 3. Determine if optimization is recommended
+          if (imageService.shouldCompress(meta)) {
+            ui.showToast("Calculating optimization preview...", "info", 1000);
+            const compResult = await imageService.compressImage(file);
+
+            this._pendingOriginalFile = file;
+            this._pendingOriginalMeta = meta;
+            this._pendingCompressedResult = compResult;
+
+            // Populate compression comparison modal
+            this._cleanupPendingModalUrls();
+
+            const origUrl = await imageService.fileToDataUrl(file);
+            const optUrl = await imageService.fileToDataUrl(compResult.file);
+
+            const origImg = document.getElementById("compression-orig-img");
+            const optImg = document.getElementById("compression-opt-img");
+            if (origImg) origImg.src = origUrl;
+            if (optImg) optImg.src = optUrl;
+
+            const origSize = document.getElementById("compression-orig-size");
+            const origDims = document.getElementById("compression-orig-dims");
+            const origFmt = document.getElementById("compression-orig-format");
+            if (origSize) origSize.textContent = meta.sizeFormatted;
+            if (origDims) origDims.textContent = `${meta.width} × ${meta.height} px`;
+            if (origFmt) origFmt.textContent = meta.type.replace("image/", "").toUpperCase();
+
+            const optSize = document.getElementById("compression-opt-size");
+            const optDims = document.getElementById("compression-opt-dims");
+            const optSavings = document.getElementById("compression-opt-savings");
+            const savingsPercent = document.getElementById("compression-savings-percent");
+
+            if (optSize) optSize.textContent = compResult.compressedFormatted;
+            if (optDims) optDims.textContent = `${compResult.width} × ${compResult.height} px`;
+            if (optSavings) optSavings.textContent = `${compResult.savedFormatted} (-${compResult.reductionPercent}%)`;
+            if (savingsPercent) savingsPercent.textContent = `-${compResult.reductionPercent}%`;
+
+            ui.toggleModal("image-compression-modal", true);
+          } else {
+            // Optimization not needed: file is small and within bounds
+            await this._attachImageFile(file, false, meta);
+          }
+        } catch (err) {
+          ui.showToast(`Image processing error: ${err.message}`, "error");
+        } finally {
+          chatImageInput.value = "";
+        }
+      });
+    }
+
+    // Modal Confirmation: Use Optimized
+    if (compressionApplyBtn) {
+      compressionApplyBtn.addEventListener("click", async () => {
+        if (this._pendingCompressedResult) {
+          await this._attachImageFile(
+            this._pendingCompressedResult.file,
+            true,
+            this._pendingCompressedResult
+          );
+        }
+        ui.toggleModal("image-compression-modal", false);
+        this._cleanupPendingModalUrls();
+      });
+    }
+
+    // Modal Confirmation: Keep Original Uncompressed
+    if (compressionKeepOrigBtn) {
+      compressionKeepOrigBtn.addEventListener("click", async () => {
+        if (this._pendingOriginalFile && this._pendingOriginalMeta) {
+          await this._attachImageFile(
+            this._pendingOriginalFile,
+            false,
+            this._pendingOriginalMeta
+          );
+        }
+        ui.toggleModal("image-compression-modal", false);
+        this._cleanupPendingModalUrls();
+      });
+    }
+
+    // Modal Dismissal
+    const closeCompressionModal = () => {
+      ui.toggleModal("image-compression-modal", false);
+      this._cleanupPendingModalUrls();
+      this._pendingOriginalFile = null;
+      this._pendingOriginalMeta = null;
+      this._pendingCompressedResult = null;
+    };
+
+    if (compressionCancelBtn) compressionCancelBtn.addEventListener("click", closeCompressionModal);
+    if (compressionCloseBtn) compressionCloseBtn.addEventListener("click", closeCompressionModal);
+    if (compressionModal) {
+      compressionModal.addEventListener("click", (e) => {
+        if (e.target === compressionModal) {
+          closeCompressionModal();
+        }
+      });
+    }
+
+    // Preview Tray Actions
+    if (imageRemoveBtn) {
+      imageRemoveBtn.addEventListener("click", () => {
+        this._clearAttachedImage();
+        ui.showToast("Image removed from message.", "info", 1500);
+      });
+    }
+
+    if (imageReoptBtn) {
+      imageReoptBtn.addEventListener("click", async () => {
+        if (!this.attachedImage?.file) return;
+        try {
+          const meta = await imageService.getImageMetadata(this.attachedImage.file);
+          const compResult = await imageService.compressImage(this.attachedImage.file);
+
+          this._pendingOriginalFile = this.attachedImage.file;
+          this._pendingOriginalMeta = meta;
+          this._pendingCompressedResult = compResult;
+
+          this._cleanupPendingModalUrls();
+          const origUrl = await imageService.fileToDataUrl(this.attachedImage.file);
+          const optUrl = await imageService.fileToDataUrl(compResult.file);
+
+          const origImg = document.getElementById("compression-orig-img");
+          const optImg = document.getElementById("compression-opt-img");
+          if (origImg) origImg.src = origUrl;
+          if (optImg) optImg.src = optUrl;
+
+          const origSize = document.getElementById("compression-orig-size");
+          const origDims = document.getElementById("compression-orig-dims");
+          const origFmt = document.getElementById("compression-orig-format");
+          if (origSize) origSize.textContent = meta.sizeFormatted;
+          if (origDims) origDims.textContent = `${meta.width} × ${meta.height} px`;
+          if (origFmt) origFmt.textContent = meta.type.replace("image/", "").toUpperCase();
+
+          const optSize = document.getElementById("compression-opt-size");
+          const optDims = document.getElementById("compression-opt-dims");
+          const optSavings = document.getElementById("compression-opt-savings");
+          const savingsPercent = document.getElementById("compression-savings-percent");
+
+          if (optSize) optSize.textContent = compResult.compressedFormatted;
+          if (optDims) optDims.textContent = `${compResult.width} × ${compResult.height} px`;
+          if (optSavings) optSavings.textContent = `${compResult.savedFormatted} (-${compResult.reductionPercent}%)`;
+          if (savingsPercent) savingsPercent.textContent = `-${compResult.reductionPercent}%`;
+
+          ui.toggleModal("image-compression-modal", true);
+        } catch (err) {
+          ui.showToast(`Failed to open optimization dialog: ${err.message}`, "error");
+        }
+      });
+    }
+
     if (chatInput) {
       chatInput.addEventListener("input", () => ui.autoResizeTextarea(chatInput));
       chatInput.addEventListener("keydown", (e) => {
@@ -217,48 +537,6 @@ class App {
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           submitCurrentMessage();
-        }
-      });
-    }
-
-    // Documents Modal Open/Close
-    const docsModalBtn = document.getElementById("docs-modal-btn");
-    const docsModalCloseBtn = document.getElementById("docs-modal-close");
-    const docsModalOverlay = document.getElementById("docs-modal");
-
-    if (docsModalBtn) {
-      docsModalBtn.addEventListener("click", () => {
-        documents.loadDocuments();
-        ui.toggleModal("docs-modal", true);
-      });
-    }
-    if (docsModalCloseBtn) {
-      docsModalCloseBtn.addEventListener("click", () => ui.toggleModal("docs-modal", false));
-    }
-    if (docsModalOverlay) {
-      docsModalOverlay.addEventListener("click", (e) => {
-        if (e.target === docsModalOverlay) {
-          ui.toggleModal("docs-modal", false);
-        }
-      });
-    }
-
-    // Document Upload Form
-    const docUploadForm = document.getElementById("doc-upload-form");
-    const docFileInput = document.getElementById("doc-file-input");
-
-    if (docUploadForm && docFileInput) {
-      docUploadForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const file = docFileInput.files[0];
-        if (!file) {
-          ui.showToast("Please choose a PDF file first.", "warning");
-          return;
-        }
-        try {
-          await documents.uploadFile(file);
-        } catch {
-          // Handled in documents.js
         }
       });
     }

@@ -37,6 +37,14 @@ class SensitiveDataScrubber(logging.Filter):
             re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"),
             "[JWT_REDACTED]",
         ),
+        # Base64 Image Payload Data URLs
+        (
+            re.compile(
+                r"data:image\/[a-zA-Z]+;base64,[A-Za-z0-9+\/=\s]{50,}",
+                re.IGNORECASE,
+            ),
+            "[IMAGE_DATA_REDACTED]",
+        ),
     ]
 
     def filter(self, record: logging.LogRecord) -> bool:

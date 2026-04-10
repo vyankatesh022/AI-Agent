@@ -57,6 +57,10 @@ async def classify_intent_node(
     llm_provider: BaseLLMProvider,
 ) -> dict[str, Any]:
     """Classify the user query into 'general_chat' or 'database_query'."""
+    # Multimodal image queries are handled directly by the vision model in general_chat
+    if state.get("image"):
+        return {"intent": "general_chat"}
+
     user_query = ""
     for msg in reversed(state.get("messages", [])):
         if msg.get("role") == "user":
@@ -139,7 +143,17 @@ async def normal_llm_node(
 ) -> dict[str, Any]:
     """Execute standard LLM generation with bounded retry handling."""
     retry_count = state.get("retry_count", 0)
-    messages = state.get("messages", [])
+    messages = list(state.get("messages", []))
+    image_url = state.get("image")
+
+    # If an image was attached in this turn, attach it to the latest user message
+    if image_url and messages:
+        for idx in range(len(messages) - 1, -1, -1):
+            if messages[idx].get("role") == "user":
+                last_msg = dict(messages[idx])
+                last_msg["image"] = image_url
+                messages[idx] = last_msg
+                break
 
     while retry_count <= max_retries:
         try:

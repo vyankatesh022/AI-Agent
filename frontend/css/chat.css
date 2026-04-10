@@ -313,6 +313,46 @@
   cursor: not-allowed;
 }
 
+/* Model Selector on Chat Input */
+.chat-model-picker {
+  display: flex;
+  align-items: center;
+  margin-right: var(--space-2);
+  flex-shrink: 0;
+}
+
+.chat-model-select {
+  height: 36px;
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: 4px 28px 4px 10px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-main);
+  cursor: pointer;
+  max-width: 175px;
+  transition: all var(--transition-fast);
+}
+
+.chat-model-select:hover {
+  border-color: var(--border-strong);
+  background-color: var(--bg-surface-hover);
+}
+
+.chat-model-select:focus {
+  border-color: var(--primary);
+  outline: none;
+}
+
+@media (max-width: 640px) {
+  .chat-model-select {
+    max-width: 120px;
+    font-size: 0.75rem;
+    padding: 4px 22px 4px 6px;
+  }
+}
+
 .chat-upload-status {
   max-width: 840px;
   width: 100%;
@@ -363,4 +403,253 @@
   font-size: 0.72rem;
   color: var(--text-faint);
   padding: 0 var(--space-2);
+}
+
+/* Inline Image Attachment Preview Tray in Input Area */
+.chat-image-preview {
+  max-width: 840px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: 8px 12px;
+  animation: toast-slide-in 0.2s ease-out;
+}
+
+.image-preview-thumb-box {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-image-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.image-preview-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.image-preview-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.image-preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.image-meta-dot {
+  color: var(--text-faint);
+}
+
+.image-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+  border-radius: var(--radius-sm);
+}
+
+/* Chat Message Image Bubble Attachment */
+.message-image-container {
+  margin-bottom: var(--space-2);
+  display: inline-block;
+  max-width: 100%;
+}
+
+.message-image-thumb {
+  max-width: 320px;
+  max-height: 240px;
+  width: auto;
+  height: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-medium);
+  cursor: pointer;
+  display: block;
+  object-fit: cover;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.message-image-thumb:hover {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-md);
+}
+
+/* Modal Dialog Large Modifier */
+.modal-dialog-lg {
+  max-width: 720px;
+}
+
+/* Compression Comparison Grid & Cards */
+.compression-comparison-grid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--space-4);
+  align-items: center;
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 640px) {
+  .compression-comparison-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+  }
+}
+
+.compression-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: border-color var(--transition-fast);
+}
+
+.compression-card.recommended-card {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.04) 0%, var(--bg-surface) 100%);
+}
+
+.compression-card-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+}
+
+.original-badge {
+  background: var(--bg-surface-elevated);
+  color: var(--text-muted);
+  border: 1px solid var(--border-medium);
+}
+
+.recommended-badge {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+  border: 1px solid var(--status-success-border);
+}
+
+.compression-thumb-wrapper {
+  height: 140px;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-top: var(--space-3);
+}
+
+.compression-thumb {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.compression-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.compression-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.compression-stat-row strong {
+  color: var(--text-main);
+}
+
+.compression-arrow-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.compression-savings-pill {
+  background: var(--status-success-bg);
+  color: var(--status-success);
+  border: 1px solid var(--status-success-border);
+  border-radius: var(--radius-full);
+  padding: 8px 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+}
+
+.compression-savings-pill span {
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.compression-savings-pill small {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.compression-arrow-icon {
+  font-size: 1.2rem;
+  color: var(--text-faint);
+}
+
+@media (max-width: 640px) {
+  .compression-arrow-col {
+    flex-direction: row;
+  }
+  .compression-arrow-icon {
+    transform: rotate(90deg);
+  }
 }

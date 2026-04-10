@@ -225,6 +225,32 @@ class Settings(BaseSettings):
         description="Comma-separated allowlist of origins permitted for CORS",
     )
 
+    # Multimodal Image Input & Compression Settings (Session 9)
+    MAX_IMAGE_SIZE_MB: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum allowed decoded image upload size in MB",
+    )
+    MAX_IMAGE_DIMENSION: int = Field(
+        default=4096,
+        ge=128,
+        le=8192,
+        description="Maximum allowed image width or height in pixels",
+    )
+    IMAGE_COMPRESSION_THRESHOLD_MB: float = Field(
+        default=1.0,
+        ge=0.1,
+        le=20.0,
+        description="Size threshold in MB above which client compression is advised",
+    )
+    IMAGE_COMPRESSION_QUALITY: float = Field(
+        default=0.82,
+        ge=0.1,
+        le=1.0,
+        description="Default compression quality factor for client canvas encoding",
+    )
+
     @field_validator("LLM_PROVIDER")
     @classmethod
     def validate_provider(cls, v: str) -> str:

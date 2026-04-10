@@ -23,4 +23,11 @@ export const CONFIG = Object.freeze({
   REQUEST_TIMEOUT_MS: 30000, // 30 seconds
   DEFAULT_PROVIDER: "gemini",
   DEFAULT_MODEL: "gemini-2.0-flash",
+
+  // Image Upload & Client-Side Compression (Session 9)
+  SUPPORTED_IMAGE_TYPES: Object.freeze(["image/jpeg", "image/png", "image/webp"]),
+  MAX_IMAGE_SIZE_BYTES: 10 * 1024 * 1024, // 10 MB maximum allowed upload size
+  IMAGE_COMPRESSION_THRESHOLD_BYTES: 1 * 1024 * 1024, // 1.0 MB threshold where optimization is advised
+  MAX_IMAGE_DIMENSION: 2048, // Maximum bounding box dimension (px)
+  IMAGE_COMPRESSION_QUALITY: 0.82, // Quality factor balancing readability and payload size
 });

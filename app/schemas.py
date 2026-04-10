@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class UserRegister(BaseModel):
@@ -81,8 +81,12 @@ class AgentChatRequest(BaseModel):
         description="Target conversation UUID belonging to the authenticated user",
     )
     message: str = Field(
-        min_length=1,
+        default="",
         description="User text prompt or query",
+    )
+    image: str | None = Field(
+        default=None,
+        description="Optional base64-encoded image data URL (e.g. 'data:image/jpeg;base64,...')",
     )
     provider: str | None = Field(
         default=None,
@@ -92,6 +96,12 @@ class AgentChatRequest(BaseModel):
         default=None,
         description="Optional model override from the approved model allowlist",
     )
+
+    @model_validator(mode="after")
+    def validate_content_presence(self) -> "AgentChatRequest":
+        if not self.message.strip() and not self.image:
+            raise ValueError("Either message or image must be provided.")
+        return self
 
 
 class AgentChatResponse(BaseModel):
@@ -112,6 +122,7 @@ class ProviderModels(BaseModel):
 
     name: str
     models: list[str]
+    vision_models: list[str] = Field(default_factory=list)
 
 
 class ModelsResponse(BaseModel):

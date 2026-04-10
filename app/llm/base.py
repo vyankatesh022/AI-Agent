@@ -24,14 +24,14 @@ class BaseLLMProvider(ABC):
     @abstractmethod
     async def generate_response(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         system_prompt: str | None = None,
         **kwargs: Any,
     ) -> str:
         """Generate a text completion for the given conversation messages.
 
         Args:
-            messages: List of message dictionaries containing 'role' and 'content'.
+            messages: List of message dictionaries containing 'role', 'content', and optional 'image'.
             system_prompt: Optional privileged system instruction.
             **kwargs: Provider-specific inference parameters.
 
@@ -43,7 +43,7 @@ class BaseLLMProvider(ABC):
     @abstractmethod
     async def generate_with_tools(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
         tools: list[Any],
         system_prompt: str | None = None,
         **kwargs: Any,

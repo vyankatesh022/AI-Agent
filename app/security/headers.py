@@ -32,7 +32,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "default-src 'self'; "
             "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data: https://fastapi.tiangolo.com; "
+            "img-src 'self' data: blob: https://fastapi.tiangolo.com; "
             "connect-src 'self'; "
             "frame-ancestors 'none';"
         )

@@ -18,9 +18,30 @@ class LLMFactory:
         "openai": {"gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"},
         "gemini": {"gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"},
     }
+    VISION_MODELS: ClassVar[set[str]] = {
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gemini-2.0-flash",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+    }
 
     # Registry for testing/mock provider overrides
     _custom_providers: ClassVar[dict[str, BaseLLMProvider]] = {}
+
+    @classmethod
+    def supports_vision(cls, provider: str, model: str) -> bool:
+        """Check if provider and model combination supports multimodal image input."""
+        normalized_provider = provider.strip().lower()
+        normalized_model = model.strip().lower()
+        # If model is in provider's known models, check against VISION_MODELS allowlist
+        if normalized_model in cls.ALLOWED_MODELS.get(normalized_provider, set()):
+            return normalized_model in cls.VISION_MODELS
+        if normalized_model in cls.VISION_MODELS:
+            return True
+        if normalized_provider in cls._custom_providers:
+            return True
+        return False
 
     @classmethod
     def is_provider_supported(cls, provider: str) -> bool:

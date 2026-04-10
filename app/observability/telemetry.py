@@ -46,6 +46,8 @@ class RequestTelemetry:
     tool_calls: list[str] = field(default_factory=list)
     retrieval_count: int = 0
     error_type: str | None = None
+    has_image: bool = False
+    image_size_bytes: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -62,6 +64,8 @@ class RequestTelemetry:
             "tool_calls": self.tool_calls,
             "retrieval_count": self.retrieval_count,
             "error_type": self.error_type,
+            "has_image": self.has_image,
+            "image_size_bytes": self.image_size_bytes,
         }
 
 
