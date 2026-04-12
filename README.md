@@ -5,8 +5,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-336791.svg)](https://www.postgresql.org/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.2%2B-orange.svg)](https://github.com/langchain-ai/langgraph)
 [![FAISS](https://img.shields.io/badge/FAISS-CPU_1.9%2B-0467DF.svg)](https://github.com/facebookresearch/faiss)
-[![Tests](https://img.shields.io/badge/tests-129%20passed-brightgreen.svg)](tests/)
-[![Code Style](https://img.shields.io/badge/code%20style-ruff-black.svg)](https://github.com/astral-sh/ruff)
+[![Tests](https://img.shields.io/badge/tests-145%20passed-brightgreen.svg)](tests/)
 
 A production-ready, multi-tenant AI Agent backend and web interface featuring hybrid RAG retrieval (dense FAISS + sparse PostgreSQL full-text search), bounded conversation memory, pluggable multi-model LLM execution (Google Gemini & OpenAI), and deterministic safety controls.
 
@@ -51,6 +50,7 @@ The system follows a strict **Defense-in-Depth** security philosophy: authorizat
 ## Key Features
 
 - **Multi-Model LLM Abstraction Layer**: Pluggable provider support for **Google Gemini** (`gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-1.5-pro`) and **OpenAI** (`gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo`) via `LLMFactory` (`app/llm/factory.py`), dynamically selectable per chat or RAG query with model allowlist validation.
+- **Multimodal Image Input & Client-Side Compression**: Native image input for vision-enabled models (`gpt-4o`, `gpt-4o-mini`, `gemini-2.0-flash`, `gemini-1.5-flash`, `gemini-1.5-pro`) with browser off-screen canvas compression (`IMAGE_COMPRESSION_QUALITY = 0.82`) above `IMAGE_COMPRESSION_THRESHOLD_MB = 1.0MB`. Backend verification (`ImageValidator` in `app/security/image_validator.py`) enforces MIME allowlisting (`image/jpeg`, `image/png`, `image/webp`), magic-byte inspection (anti-spoofing), size limits (`MAX_IMAGE_SIZE_MB = 10`), and dimensional limits (`MAX_IMAGE_DIMENSION = 4096`).
 - **LangGraph Agent Workflow**: Autonomous intent classification via `classify_intent_node` (`app/agent/nodes.py`) routing queries into `general_chat`, `database_query`, or `document_search`.
 - **Hybrid RAG Retrieval Engine**: Fuses dense semantic vector search (FAISS `IndexFlatIP` with normalized cosine similarity via `UserFAISSIndex`) and sparse keyword search (PostgreSQL `tsvector` with `ts_rank_cd` via `KeywordRetriever`), applying min-max score normalization, linear weighted fusion (0.6 vector / 0.4 keyword default), and deduplication.
 - **Authoritative Citation Verification**: Delimits retrieved context blocks as `[DOCUMENT SOURCE S1]`, prompts the model to cite facts with `[S1]`, and strips hallucinated source tags via `CitationValidator` (`app/rag/citations.py`).
@@ -238,6 +238,12 @@ OPENAI_MODEL=gpt-4o-mini
 # Embeddings
 EMBEDDING_PROVIDER=gemini
 EMBEDDING_MODEL=text-embedding-004
+
+# Multimodal Image Input & Compression
+MAX_IMAGE_SIZE_MB=10
+MAX_IMAGE_DIMENSION=4096
+IMAGE_COMPRESSION_THRESHOLD_MB=1.0
+IMAGE_COMPRESSION_QUALITY=0.82
 ```
 
 ---
@@ -287,6 +293,10 @@ All settings are managed through `Settings` (`app/config.py`) using Pydantic Set
 | `MAX_TOOL_CALLS_PER_REQUEST` | `int` | `5` | Upper limit on tool calls executed per single chat turn. |
 | `MAX_AGENT_GRAPH_ITERATIONS` | `int` | `10` | LangGraph recursion iteration limit to prevent loops. |
 | `CORS_ALLOWED_ORIGINS` | `str` | `http://localhost:8000,...`| Comma-separated list of allowed CORS origins. |
+| `MAX_IMAGE_SIZE_MB` | `int` | `10` | Maximum allowed decoded image upload size in MB (1–50MB). |
+| `MAX_IMAGE_DIMENSION` | `int` | `4096` | Maximum allowed image width or height in pixels (128–8192px). |
+| `IMAGE_COMPRESSION_THRESHOLD_MB`| `float`| `1.0` | Size threshold in MB above which client canvas compression is advised. |
+| `IMAGE_COMPRESSION_QUALITY` | `float` | `0.82` | Default compression quality factor for client canvas encoding (0.1–1.0). |
 
 ---
 
@@ -317,6 +327,7 @@ The service includes a built-in, responsive single-page web GUI served directly 
 - **Authentication**: Dedicated `/ui/login.html` and `/ui/register.html` views storing the JWT token in `localStorage`.
 - **Conversational Chat**: Interactive multi-turn interface supporting real-time chat, Markdown rendering, auto-scrolling, code blocks, and conversation history sidebar.
 - **Model Selector**: Dynamic dropdown populated at runtime from `GET /agent/models`, allowing instant switching between configured Google Gemini and OpenAI models.
+- **Multimodal Image Input & Preview**: Attach images directly via paperclip icon, drag-and-drop, or clipboard paste (`Ctrl+V` / `Cmd+V`). Performs client-side validation and off-screen HTML5 canvas compression, displays an active image thumbnail badge with one-click removal, and renders visual thumbnails directly in chat bubbles.
 - **Document Management Modal**: Manage your personal RAG knowledge base:
   - Drag-and-drop PDF upload with progress feedback.
   - Real-time processing status tracking (`pending`, `processing`, `ready`, `failed`).
@@ -471,7 +482,7 @@ Get chronological message history for a conversation.
 ### AI Agent (`/agent`)
 
 #### `GET /agent/models`
-Inspect backend-approved providers and models.
+Inspect backend-approved providers and models (including vision-capable models).
 - **Auth**: None
 - **Response `200 OK`**:
   ```json
@@ -481,29 +492,33 @@ Inspect backend-approved providers and models.
     "providers": {
       "gemini": {
         "name": "Google Gemini",
-        "models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"]
+        "models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"],
+        "vision_models": ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash"]
       },
       "openai": {
         "name": "OpenAI",
-        "models": ["gpt-3.5-turbo", "gpt-4o", "gpt-4o-mini"]
+        "models": ["gpt-3.5-turbo", "gpt-4o", "gpt-4o-mini"],
+        "vision_models": ["gpt-4o", "gpt-4o-mini"]
       }
     }
   }
   ```
 
 #### `POST /agent/chat`
-Submit a message to the LangGraph AI Agent.
+Submit a message (text and/or multimodal image) to the LangGraph AI Agent. Either `message` or `image` must be provided.
 - **Auth**: Bearer Token
 - **Rate Limit**: 20 requests/minute per user
 - **Request Body**:
   ```json
   {
     "conversation_id": "e9b25164-94c3-4d6c-bb9a-32fae0a29482",
-    "message": "What is our company's refund policy?",
+    "message": "What is shown in this diagram?",
+    "image": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
     "provider": "gemini",
     "model": "gemini-2.0-flash"
   }
   ```
+  *(Note: `image` must be a standard base64 data URL: `image/jpeg`, `image/png`, or `image/webp`. Supplying an image to a text-only model like `gpt-3.5-turbo` returns HTTP 400.)*
 - **Response `200 OK`**:
   ```json
   {
@@ -765,13 +780,17 @@ The application implements rigorous defensive controls documented in `docs/secur
 7. **HTTP Security Headers**:
    - `SecurityHeadersMiddleware` (`app/security/headers.py`) attaches `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`.
 8. **Sensitive Data Scrubbing**:
-   - Custom logging filter `SensitiveDataScrubber` (`app/observability/logging.py`) automatically redacts Bearer tokens, OpenAI keys (`sk-...`), Google AI keys (`AIza...`), password fields, and raw JWT strings from application logs.
+   - Custom logging filter `SensitiveDataScrubber` (`app/observability/logging.py`) automatically redacts Bearer tokens, OpenAI keys (`sk-...`), Google AI keys (`AIza...`), password fields, raw JWT strings, and base64 image data URLs (`[IMAGE_DATA_REDACTED]`) from application logs.
+9. **Multimodal Image Validation & Privacy**:
+   - Multi-stage image verification (`ImageValidator` in `app/security/image_validator.py`): MIME allowlist (`image/jpeg`, `image/png`, `image/webp`), binary magic byte signature verification (anti-spoofing), dimension bounds (\(\le 4096\text{px}\)), and decoded payload size bounding (\(\le 10\text{MB}\)).
+   - Model capability enforcement: Verifies the target model supports vision before processing.
+   - Privacy guarantee: Raw base64 image bytes are never persisted in the database (stored as `[Image Attached]`) and never emitted into log streams.
 
 ---
 
 ## Testing & Quality Assurance
 
-The codebase features comprehensive test coverage with **129 passing automated tests** across unit, integration, and security suites:
+The codebase features comprehensive test coverage with **145 passing automated tests** across unit, integration, multimodal vision, and security suites:
 
 ```bash
 # Run the complete test suite
